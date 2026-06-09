@@ -1,28 +1,43 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import { AlertTriangleIcon, Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import z from "zod";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { Fragment } from "react";
+import { CopyIcon, MessageSquare, RefreshCcwIcon } from "lucide-react";
+import { Fragment, useCallback, useState } from "react";
 import { toast } from "sonner";
 
-import {
-  ChatStatus,
-  FinishReason,
-  MessageRole,
-  MyUIMessage,
-} from "@/types/chat";
-import { ChatBubble } from "./chat-bubble";
+import { MyUIMessage } from "@/types/chat";
 import { Button } from "../ui/button";
 import { AnthropicModel } from "@/lib/api/anthropic";
-import { FieldGroup } from "../ui/field";
-import { FormMessageSchema } from "@/schemas/message";
-import { SelectGroup, SelectItem, SelectLabel } from "../ui/select";
-import { FormSelect, FormTextarea } from "../form/form";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "../ai-elements/conversation";
+import {
+  Message,
+  MessageAction,
+  MessageActions,
+  MessageContent,
+  MessageResponse,
+} from "../ai-elements/message";
+import {
+  PromptInput,
+  PromptInputMessage,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "../ai-elements/prompt-input";
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorLogo,
+  ModelSelectorName,
+  ModelSelectorTrigger,
+} from "../ai-elements/model-selector";
 
 interface ChatProps {
   models: AnthropicModel[];
@@ -31,142 +46,185 @@ interface ChatProps {
 const PREFFERED_MODEL = "haiku";
 
 export function Chat({ models }: ChatProps) {
-  const form = useForm<z.infer<typeof FormMessageSchema>>({
-    defaultValues: {
-      content: "",
-      model: models.find((model) => model.id.includes(PREFFERED_MODEL))?.id,
-    },
-    reValidateMode: "onBlur",
-    resolver: zodResolver(FormMessageSchema),
+  // const form = useForm<z.infer<typeof FormMessageSchema>>({
+  //   defaultValues: {
+  //     content: "",
+  //     model: models.find((model) => model.id.includes(PREFFERED_MODEL))?.id,
+  //   },
+  //   reValidateMode: "onBlur",
+  //   resolver: zodResolver(FormMessageSchema),
+  // });
+
+  const [userMessageText, setUserMessageText] = useState("");
+  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
+    return (
+      models.find((model) => model.id.includes(PREFFERED_MODEL))?.id ?? null
+    );
   });
+
   const { messages, sendMessage, status, regenerate } = useChat<MyUIMessage>();
 
-  async function handleSubmit({
-    content,
-    model,
-  }: z.infer<typeof FormMessageSchema>) {
+  const handleSubmit = async (message: PromptInputMessage) => {
+    const trimmedMessage = message.text.trim();
+
+    if (!trimmedMessage) return;
+
     try {
-      await sendMessage({ text: content }, { body: { model } });
-      form.resetField("content");
+      await sendMessage(
+        { text: message.text },
+        { body: { model: selectedModelId } },
+      );
+
+      setUserMessageText("");
     } catch {
       toast("Error", {
         description: "Couldn't send a message",
         action: {
           label: "Retry",
-          onClick: () => handleSubmit({ content, model }),
+          onClick: () => handleSubmit(message),
         },
       });
     }
-  }
+  };
 
-  const lastMessage = messages[messages.length - 1];
-  const isError = status === ChatStatus.error;
-  const isStreaming = status === ChatStatus.streaming;
-  const isInterrupted =
-    lastMessage?.role === MessageRole.assistant &&
-    status !== ChatStatus.streaming &&
-    status !== ChatStatus.submitted &&
-    lastMessage.metadata?.finishReason !== FinishReason.stop;
+  const handleModelSelect = useCallback((id: string) => {
+    setSelectedModelId(id);
+    setIsModelSelectorOpen(false);
+  }, []);
 
-  console.log({ messages });
+  const hasMessages = messages.length > 0;
+  const selectedModelData = models.find(
+    (model) => model.id === selectedModelId,
+  );
 
   return (
     <div className="h-full flex flex-col gap-4">
       <div className="grow min-h-0 overflow-y-auto flex flex-col gap-1 px-2">
-        {messages.map((message) => (
-          <Fragment key={message.id}>
-            {message.parts.map((part, partIndex) => {
-              switch (part.type) {
-                case "text":
-                  if (message.role === MessageRole.system) return null;
+        <Conversation>
+          <ConversationContent>
+            {messages.map((message, messageIndex) => (
+              <Fragment key={message.id}>
+                {hasMessages ? (
+                  message.parts.map((part, i) => {
+                    switch (part.type) {
+                      case "text":
+                        const isLastMessage =
+                          messageIndex === messages.length - 1;
 
-                  if (message.role === MessageRole.user)
-                    return (
-                      <>
-                        <div className="text-end">User:</div>
+                        return (
+                          <Message
+                            from={message.role}
+                            key={`${message.id}-${i}`}
+                          >
+                            <MessageContent>
+                              <MessageResponse>{part.text}</MessageResponse>
+                            </MessageContent>
 
-                        <ChatBubble
-                          className="max-w-3/4 self-end"
-                          role={MessageRole.user}
-                        >
-                          {part.text}
-                        </ChatBubble>
-                      </>
-                    );
+                            {message.role === "assistant" && isLastMessage && (
+                              <MessageActions>
+                                <MessageAction
+                                  onClick={() => regenerate()}
+                                  label="Retry"
+                                >
+                                  <RefreshCcwIcon className="size-3" />
+                                </MessageAction>
 
-                  return (
-                    <>
-                      <div>AI:</div>
-
-                      <div
-                        key={`${message.id}-${partIndex}`}
-                        className={"prose dark:prose-invert max-w-9/10"}
-                      >
-                        <Markdown remarkPlugins={[remarkGfm]}>
-                          {part.text}
-                        </Markdown>
-                      </div>
-                    </>
-                  );
-              }
-            })}
-          </Fragment>
-        ))}
-
-        {isStreaming && <Loader2 className="animate-spin" size={12} />}
-
-        {isError ||
-          (isInterrupted && (
-            <div className="flex gap-1 items-center">
-              <AlertTriangleIcon size={16} className="text-red-400" />
-
-              <div className="text-red-400 text-sm">
-                {isError
-                  ? "Something went wrong..."
-                  : "This response was interrupted and may be incomplete"}
-              </div>
-
-              <Button
-                variant="destructive"
-                size="xs"
-                className="cursor-pointer"
-                onClick={() => regenerate()}
-              >
-                Retry
-              </Button>
-            </div>
-          ))}
+                                <MessageAction
+                                  onClick={() =>
+                                    navigator.clipboard.writeText(part.text)
+                                  }
+                                  label="Copy"
+                                >
+                                  <CopyIcon className="size-3" />
+                                </MessageAction>
+                              </MessageActions>
+                            )}
+                          </Message>
+                        );
+                      default:
+                        return null;
+                    }
+                  })
+                ) : (
+                  <ConversationEmptyState
+                    icon={<MessageSquare className="size-12" />}
+                    title="Start a conversation"
+                    description="Type a message below to begin chatting"
+                  />
+                )}
+              </Fragment>
+            ))}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
       </div>
 
-      <form
-        onSubmit={form.handleSubmit(handleSubmit)}
-        className="flex flex-col gap-2"
-      >
-        <FieldGroup>
-          <FormSelect
-            control={form.control}
-            name="model"
-            getTriggerText={(value: string) =>
-              models.find((m) => m.id === value)?.display_name ?? value
+      <div className="">
+        <ModelSelector
+          onOpenChange={setIsModelSelectorOpen}
+          open={isModelSelectorOpen}
+        >
+          <ModelSelectorTrigger
+            render={
+              <Button className="w-50 justify-between" variant="outline">
+                {selectedModelData && (
+                  <>
+                    <ModelSelectorLogo provider="anthropic" />
+                    <ModelSelectorName>
+                      {selectedModelData?.display_name}
+                    </ModelSelectorName>
+                  </>
+                )}
+              </Button>
             }
-          >
-            <SelectGroup>
-              <SelectLabel>Models</SelectLabel>
-              {models.map((model) => {
-                return (
-                  <SelectItem value={model.id} key={model.id}>
-                    {model.display_name}
-                  </SelectItem>
-                );
-              })}
-            </SelectGroup>
-          </FormSelect>
+          ></ModelSelectorTrigger>
 
-          <FormTextarea control={form.control} name="content" />
+          <ModelSelectorContent>
+            <ModelSelectorInput placeholder="Search models..." />
+            <ModelSelectorList>
+              <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
+              {models.map((model) => (
+                <ModelSelectorItem
+                  key={model.id}
+                  onSelect={handleModelSelect}
+                  value={model.id}
+                  data-checked={selectedModelId === model.id}
+                >
+                  <ModelSelectorLogo provider="anthropic" />
 
-          <Button type="submit">Send</Button>
-        </FieldGroup>
-      </form>
+                  <ModelSelectorName>{model.display_name}</ModelSelectorName>
+
+                  {/* Show thinking capabilities, etc */}
+                  {/* <ModelSelectorLogoGroup>
+                  {model.capabilities.map((capability) => (
+                    <ModelSelectorLogo key={capability} provider={capability} />
+                  ))}
+                </ModelSelectorLogoGroup> */}
+                </ModelSelectorItem>
+              ))}
+            </ModelSelectorList>
+          </ModelSelectorContent>
+        </ModelSelector>
+
+        <PromptInput
+          onSubmit={handleSubmit}
+          className="mt-4 w-full mx-auto relative"
+        >
+          <PromptInputTextarea
+            value={userMessageText}
+            placeholder="Say something..."
+            onChange={(e) => setUserMessageText(e.currentTarget.value)}
+            className="pr-12"
+          />
+
+          <PromptInputSubmit
+            status={status === "streaming" ? "streaming" : "ready"}
+            disabled={!userMessageText.trim()}
+            className="absolute bottom-1 right-1"
+          />
+        </PromptInput>
+      </div>
     </div>
   );
 }
