@@ -46,14 +46,7 @@ interface ChatProps {
 const PREFFERED_MODEL = "haiku";
 
 export function Chat({ models }: ChatProps) {
-  // const form = useForm<z.infer<typeof FormMessageSchema>>({
-  //   defaultValues: {
-  //     content: "",
-  //     model: models.find((model) => model.id.includes(PREFFERED_MODEL))?.id,
-  //   },
-  //   reValidateMode: "onBlur",
-  //   resolver: zodResolver(FormMessageSchema),
-  // });
+  console.log({ models });
 
   const [userMessageText, setUserMessageText] = useState("");
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
@@ -98,9 +91,11 @@ export function Chat({ models }: ChatProps) {
     (model) => model.id === selectedModelId,
   );
 
+  console.log({ messages });
+
   return (
     <div className="h-full flex flex-col gap-4">
-      <div className="grow min-h-0 overflow-y-auto flex flex-col gap-1 px-2">
+      <div className="grow min-h-0 overflow-y-auto flex flex-col gap-1">
         <Conversation>
           <ConversationContent>
             {messages.map((message, messageIndex) => (
