@@ -1,7 +1,9 @@
-import { UIMessage } from "ai";
+import { LanguageModelUsage, UIMessage } from "ai";
 
 export type MyMetadata = {
   finishReason?: FinishReason;
+  usage: LanguageModelUsage;
+  modelId: string;
 };
 
 export type MyUIMessage = UIMessage<MyMetadata>;

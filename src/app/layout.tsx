@@ -55,12 +55,12 @@ export default function RootLayout({
               <SidebarProvider>
                 <AppSidebar />
 
-                <SidebarInset className="flex flex-col flex-1">
+                <SidebarInset className="flex flex-col flex-1 min-w-0">
                   <AppHeader />
 
                   <Separator />
 
-                  <div className="grow min-h-0 max-w-5xl w-full h-full mx-auto p-4">
+                  <div className="flex-1 min-h-0 max-w-5xl w-full mx-auto p-4">
                     {children}
                   </div>
                 </SidebarInset>

@@ -49,7 +49,16 @@ function logCost(
 }
 
 export async function POST(req: Request) {
-  const { messages, model: modelId } = schema.parse(await req.json());
+  const body = await req.json();
+
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    return Response.json(
+      { error: "Invalid request", issues: parsed.error.issues },
+      { status: 400 },
+    );
+  }
+  const { messages, model: modelId } = parsed.data;
 
   const modelMessages = await convertToModelMessages(messages);
 
@@ -81,45 +90,15 @@ export async function POST(req: Request) {
     },
   });
 
-  // stopWhen: stepCountIs(5),
-  // tools: {
-  //   weather: tool({
-  //     description: "Get the weather in a location (fahrenheit)",
-  //     inputSchema: z.object({
-  //       location: z.string().describe("The location to get the weather for"),
-  //     }),
-  //     execute: async ({ location }) => {
-  //       const temperature = Math.round(Math.random() * (90 - 32) + 32);
-  //       return {
-  //         location,
-  //         temperature,
-  //       };
-  //     },
-  //   }),
-  //   convertFahrenheitToCelsius: tool({
-  //     description: "Convert a temperature in fahrenheit to celsius",
-  //     inputSchema: z.object({
-  //       temperature: z
-  //         .number()
-  //         .describe("The temperature in fahrenheit to convert"),
-  //     }),
-  //     execute: async ({ temperature }) => {
-  //       const celsius = Math.round((temperature - 32) * (5 / 9));
-  //       return {
-  //         celsius,
-  //       };
-  //     },
-  //   }),
-  // },
-  // onStepFinish: ({ toolResults }) => {
-  //   console.log(toolResults);
-  // },
-
   return result.toUIMessageStreamResponse({
     messageMetadata: ({ part }) => {
       if (part.type !== "finish") return;
 
-      return { finishReason: part.finishReason };
+      return {
+        finishReason: part.finishReason,
+        usage: part.totalUsage,
+        modelId,
+      };
     },
   });
 }
