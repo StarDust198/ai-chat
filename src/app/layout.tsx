@@ -1,14 +1,12 @@
+import { ReactNode } from "react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import "../styles/globals.css";
-import { ThemeProvider } from "@/components/themes/theme-provider";
-import { ClerkProvider } from "@clerk/nextjs";
-import { Toaster } from "@/components/ui/sonner";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import Providers from "./providers";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import { SidebarInset } from "@/components/ui/sidebar";
 import { AppHeader } from "@/components/layout/app-header";
-import { Separator } from "@/components/ui/separator";
+import { Separator } from "@base-ui/react";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,7 +33,7 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: ReactNode;
 }>) {
   return (
     <html
@@ -44,32 +42,19 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="h-screen flex flex-col">
-        <ClerkProvider>
-          <ThemeProvider
-            attribute="class"
-            defaultTheme="system"
-            enableSystem
-            disableTransitionOnChange
-          >
-            <TooltipProvider>
-              <SidebarProvider>
-                <AppSidebar />
+        <Providers>
+          <AppSidebar />
 
-                <SidebarInset className="flex flex-col flex-1 min-w-0">
-                  <AppHeader />
+          <SidebarInset className="flex flex-col flex-1 min-w-0">
+            <AppHeader />
 
-                  <Separator />
+            <Separator />
 
-                  <div className="flex-1 min-h-0 max-w-5xl w-full mx-auto p-4">
-                    {children}
-                  </div>
-                </SidebarInset>
-              </SidebarProvider>
-            </TooltipProvider>
-
-            <Toaster />
-          </ThemeProvider>
-        </ClerkProvider>
+            <div className="flex-1 min-h-0 max-w-5xl w-full mx-auto p-4">
+              {children}
+            </div>
+          </SidebarInset>
+        </Providers>
       </body>
     </html>
   );

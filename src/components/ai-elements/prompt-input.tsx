@@ -39,7 +39,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 import { BaseUIEvent } from "@base-ui/react";
 import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
 import {

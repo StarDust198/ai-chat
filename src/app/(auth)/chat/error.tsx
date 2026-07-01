@@ -17,7 +17,7 @@ export default function Error({
 
   return (
     <main className="flex h-full flex-col gap-4 items-center justify-center">
-      <h2 className="text-center">Something went wrong in the notes list!</h2>
+      <h2 className="text-center">Something went wrong on the chat page!</h2>
 
       <Button onClick={() => reset()}>Try again</Button>
     </main>

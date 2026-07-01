@@ -1,5 +1,6 @@
 "use client";
-import { ReactNode } from "react";
+
+import { ReactNode, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -21,12 +22,9 @@ import {
   ChatBubbleLeftRightIcon,
   UserPlusIcon,
 } from "@heroicons/react/24/outline";
-import {
-  privateRoutes,
-  publicRoutes,
-  RouteData,
-  RouteKey,
-} from "@/constants/routes";
+import { publicRoutes, RouteData, RouteKey } from "@/constants/routes";
+import { useQuery } from "@tanstack/react-query";
+import { chatsOptions } from "@/lib/query/chats-options";
 
 export type AppSidebarItem = {
   title: string;
@@ -41,14 +39,27 @@ export type AppSidebarProps = {
 const routeIconsMap: Record<RouteKey, ReactNode> = {
   signin: <ArrowRightEndOnRectangleIcon />,
   signup: <UserPlusIcon />,
-  chat: <ChatBubbleLeftRightIcon />,
 };
+
+const NEW_CHAT_TITLE = "New Chat";
+const SIGN_OUT_TITLE = "Sign Out";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const { state } = useSidebar();
+  const { data: chats } = useQuery(chatsOptions());
 
   const isExpanded = state === "expanded";
+
+  const isNewChatRoute = useMemo(() => {
+    const match = pathname.match(/^\/chat\/([^/]+)$/);
+
+    if (!match) return false;
+
+    const id = match[1];
+
+    return !chats?.map((chat) => chat.id).includes(id);
+  }, [chats, pathname]);
 
   const renderRouteGroup = (
     routeGroup: Partial<Record<RouteKey, RouteData>>,
@@ -91,17 +102,30 @@ export function AppSidebar() {
               <Show when="signed-out">{renderRouteGroup(publicRoutes)}</Show>
 
               <Show when="signed-in">
-                {renderRouteGroup(privateRoutes)}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    tooltip={NEW_CHAT_TITLE}
+                    isActive={isNewChatRoute}
+                    render={
+                      <Link href="/chat">
+                        <ChatBubbleLeftRightIcon />
+
+                        <span>{NEW_CHAT_TITLE}</span>
+                      </Link>
+                    }
+                  />
+                </SidebarMenuItem>
 
                 <SidebarMenuItem>
                   <SidebarMenuButton
-                    tooltip="Sign Out"
+                    tooltip={SIGN_OUT_TITLE}
+                    className="cursor-pointer"
                     render={
                       <SignOutButton>
                         <button className="cursor-pointer">
                           <ArrowRightStartOnRectangleIcon />
 
-                          <span>Sign Out</span>
+                          <span>{SIGN_OUT_TITLE}</span>
                         </button>
                       </SignOutButton>
                     }
@@ -111,6 +135,34 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <Show when="signed-in">
+          <SidebarGroup className="min-h-0">
+            <SidebarGroupLabel>Chats</SidebarGroupLabel>
+
+            <SidebarGroupContent className="flex flex-col grow min-h-0 gap-0.5 px-1 overflow-hidden hover:overflow-y-auto">
+              <SidebarMenu>
+                {chats?.map((chat) => {
+                  const chatUrl = `/chat/${chat.id}`;
+
+                  return (
+                    <SidebarMenuItem key={chat.id}>
+                      <SidebarMenuButton
+                        tooltip={chat.title}
+                        isActive={pathname === chatUrl}
+                        render={
+                          <Link href={chatUrl}>
+                            <span className="truncate">{chat.title}</span>
+                          </Link>
+                        }
+                      />
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        </Show>
       </SidebarContent>
     </Sidebar>
   );

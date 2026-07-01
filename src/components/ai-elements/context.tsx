@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/hover-card";
 import { Progress } from "@/components/ui/progress";
 import { getUsageCost } from "@/lib/pricing/models";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 import type { LanguageModelUsage } from "ai";
 import type { ComponentProps } from "react";
 import { createContext, useContext, useMemo } from "react";

@@ -5,7 +5,7 @@ import { ThemeSwitcher } from "../themes/theme-switcher";
 import { SidebarTrigger } from "../ui/sidebar";
 import { usePathname } from "next/navigation";
 import { titleByUrl } from "@/constants/routes";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/cn";
 
 export type AppHeaderProps = {
   className?: string;

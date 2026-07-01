@@ -45,14 +45,20 @@ import {
 } from "../ai-elements/model-selector";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ChatContext } from "./chat-context";
+import { DefaultChatTransport } from "ai";
+import { useCreateChat } from "@/lib/query/use-create-chat";
 
 interface ChatProps {
   models: AnthropicModel[];
+  id: string;
+  initialMessages: MyUIMessage[];
 }
 
 const PREFFERED_MODEL = "haiku";
 
-export function Chat({ models }: ChatProps) {
+export function Chat({ id, models, initialMessages }: ChatProps) {
+  console.log("render");
+
   const [userMessageText, setUserMessageText] = useState("");
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
@@ -61,18 +67,58 @@ export function Chat({ models }: ChatProps) {
     );
   });
 
+  // const router = useRouter();
+
+  const createChatMutation = useCreateChat();
   const { messages, sendMessage, status, regenerate, error } =
-    useChat<MyUIMessage>();
+    useChat<MyUIMessage>({
+      id,
+      messages: initialMessages,
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest({ messages, body }) {
+          return {
+            body: {
+              message: messages[messages.length - 1],
+              chatId: body?.chatId,
+              modelId: body?.modelId,
+            },
+          };
+        },
+      }),
+    });
 
   const handleSubmit = async (message: PromptInputMessage) => {
     const trimmedMessage = message.text.trim();
 
     if (!trimmedMessage) return;
 
+    if (messages.length === 0) {
+      try {
+        await createChatMutation.mutateAsync({
+          userMessage: trimmedMessage,
+          id,
+        });
+
+        // router.replace(`/chat/${chatId}`, { scroll: false });
+        // window.history.replaceState(null, "", `\/chat/${chatId}`);
+      } catch {
+        toast("Error", {
+          description: "Couldn't create a new chat",
+          action: {
+            label: "Retry",
+            onClick: () => handleSubmit(message),
+          },
+        });
+
+        return;
+      }
+    }
+
     try {
       await sendMessage(
         { text: message.text },
-        { body: { model: selectedModelId } },
+        { body: { modelId: selectedModelId, chatId: id } },
       );
 
       setUserMessageText("");
@@ -88,7 +134,7 @@ export function Chat({ models }: ChatProps) {
   };
 
   const handleRegenerate = () => {
-    regenerate({ body: { model: selectedModelId } });
+    regenerate({ body: { modelId: selectedModelId, chatId: id } });
   };
 
   const handleModelSelect = useCallback((id: string) => {
@@ -100,7 +146,7 @@ export function Chat({ models }: ChatProps) {
     (model) => model.id === selectedModelId,
   );
 
-  console.log({ models, messages, error, status });
+  // console.log({ models, messages, error, status });
 
   return (
     <div className="h-full flex flex-col gap-4">

@@ -12,30 +12,12 @@ generator client {
 }
 
 model Chat {
-  id        String    @id @default(cuid())
+  id        String   @id @default(cuid())
   userId    String
-  title     String    @default("New chat")
-  createdAt DateTime  @default(now())
+  title     String   @default("New chat")
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  messages  Message[]
 
   @@index([userId])
 }
-
-model Message {
-  id        String   @id           // the server-generated msg id
-  chatId    String
-  chat      Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  role      String                 // "user" | "assistant"
-  parts     Json                   // the UIMessage parts array
-  createdAt DateTime @default(now())
-}
-
-// model Note {
-//   id        String   @id @default(cuid())
-//   title     String
-//   content   String   @default("")
-//   createdBy String
-//   createdAt DateTime @default(now())
-//   updatedAt DateTime @updatedAt
-// }

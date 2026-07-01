@@ -18,10 +18,10 @@ export const publicRoutes = {
 } as const;
 
 export const privateRoutes = {
-  chat: {
-    title: "Chat",
-    url: "/chat",
-  },
+  // chat: {
+  //   title: "New chat",
+  //   url: "/chat",
+  // },
   // settings: {
   //   title: "Settings",
   //   url: "/settings",

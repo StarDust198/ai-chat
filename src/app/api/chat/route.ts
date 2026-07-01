@@ -1,66 +1,83 @@
-import { streamText, UIMessage, convertToModelMessages, stepCountIs } from "ai";
+import {
+  streamText,
+  convertToModelMessages,
+  stepCountIs,
+  createUIMessageStreamResponse,
+  toUIMessageStream,
+  TypeValidationError,
+  createIdGenerator,
+} from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { weatherTool } from "@/lib/tools/weather";
-import { calcTool } from "@/lib/tools/calc";
+import { tools } from "@/lib/tools";
+import { getChat, saveChat, validateMessages } from "@/lib/actions/chats";
+import { MyUIMessage } from "@/types/chat";
+import { auth } from "@clerk/nextjs/server";
 
 const schema = z.object({
-  messages: z.array(z.custom<UIMessage>()),
-  model: z.string(),
+  // Message is validated below
+  message: z.custom<MyUIMessage>(),
+  // messages: z.array(z.custom<MyUIMessage>()),
+  modelId: z.string(),
+  chatId: z.string(),
 });
-
-// const webSearchTool = anthropic.tools.webSearch_20260209({
-const webSearchTool = anthropic.tools.webSearch_20250305({
-  maxUses: 5,
-});
-
-// Rates per 1M tokens [input, output]. Update from the pricing pages.
-const PRICING: Record<string, { in: number; out: number }> = {
-  "claude-haiku-4-5-20251001": { in: 1, out: 5 },
-  "claude-sonnet-4-6": { in: 3, out: 15 },
-  "claude-opus-4-8": { in: 5, out: 25 },
-};
-
-function logCost(
-  modelId: string,
-  usage: {
-    inputTokens?: number;
-    outputTokens?: number;
-    cachedInputTokens?: number;
-  },
-) {
-  const rate = PRICING[modelId];
-  if (!rate) return console.warn(`No pricing for ${modelId}`);
-
-  const totalIn = usage.inputTokens ?? 0;
-  const out = usage.outputTokens ?? 0;
-  const cachedIn = usage.cachedInputTokens ?? 0; // cache *reads* (subset of totalIn)
-  const freshIn = totalIn - cachedIn;
-
-  // cache reads bill at 0.1x the input rate
-  const inputCost = (freshIn * rate.in + cachedIn * rate.in * 0.1) / 1_000_000;
-  const outputCost = (out * rate.out) / 1_000_000;
-  const cost = inputCost + outputCost;
-
-  console.log(
-    `[${modelId}] in=${totalIn} (cached ${cachedIn}) out=${out} ` +
-      `→ $${cost.toFixed(6)}`,
-  );
-}
 
 export async function POST(req: Request) {
+  const { isAuthenticated } = await auth();
+
+  if (!isAuthenticated) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
 
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
-      { error: "Invalid request", issues: parsed.error.issues },
+      { error: "Invalid request", details: parsed.error.issues },
       { status: 400 },
     );
   }
-  const { messages, model: modelId } = parsed.data;
+  const { message, modelId, chatId } = parsed.data;
 
-  const modelMessages = await convertToModelMessages(messages);
+  const chat = await getChat({ chatId });
+
+  if (!chat) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  let validatedMessages: MyUIMessage[];
+
+  try {
+    validatedMessages = await validateMessages(chat.messages);
+  } catch (error) {
+    if (error instanceof TypeValidationError) {
+      console.error("Database messages validation failed:", error);
+      // Could implement message migration or filtering here
+      // For now, start with empty history
+      validatedMessages = [];
+    } else {
+      return Response.json(
+        { error: "Error validating DB messages" },
+        { status: 500 },
+      );
+    }
+  }
+
+  try {
+    const [validatedMessage] = await validateMessages([message]);
+
+    validatedMessages.push(validatedMessage);
+  } catch (error) {
+    console.error("User message validation failed:", error);
+
+    return Response.json(
+      { error: "Error validating user message" },
+      { status: 400 },
+    );
+  }
+
+  const modelMessages = await convertToModelMessages(validatedMessages);
 
   // mark the final message as the cache breakpoint
   const last = modelMessages.at(-1);
@@ -74,31 +91,34 @@ export async function POST(req: Request) {
   const result = streamText({
     model: anthropic(modelId),
     messages: modelMessages,
-    onFinish: ({ usage, providerMetadata }) => {
-      logCost(modelId, usage);
-      // cache *writes* show up here for Anthropic (billed at 1.25x input):
-      console.log(providerMetadata?.anthropic?.cacheCreationInputTokens);
-    },
     stopWhen: stepCountIs(5),
-    tools: {
-      calc: calcTool,
-      weather: weatherTool,
-      web_search: {
-        ...webSearchTool,
-        providerOptions: { cacheControl: { type: "ephemeral" } },
-      },
-    },
+    tools,
   });
 
-  return result.toUIMessageStreamResponse({
-    messageMetadata: ({ part }) => {
-      if (part.type !== "finish") return;
+  // consume the stream to ensure it runs to completion & triggers onEnd
+  // even when the client response is aborted:
+  result.consumeStream(); // no await
 
-      return {
-        finishReason: part.finishReason,
-        usage: part.totalUsage,
-        modelId,
-      };
-    },
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({
+      stream: result.stream,
+      originalMessages: validatedMessages,
+      generateMessageId: createIdGenerator({
+        prefix: "msg",
+        size: 16,
+      }),
+      onEnd: ({ messages }) => {
+        saveChat({ chatId, messages });
+      },
+      messageMetadata: ({ part }) => {
+        if (part.type !== "finish") return;
+
+        return {
+          finishReason: part.finishReason,
+          usage: part.totalUsage,
+          modelId,
+        };
+      },
+    }),
   });
 }
