@@ -18,14 +18,18 @@ const CACHE_WRITE_MULTIPLIER = 1.25; // 5-minute cache writes bill at 1.25x inpu
 /**
  * Base rates in USD per million tokens, keyed by model id.
  * Source: Anthropic pricing (platform.claude.com/docs/en/about-claude/pricing),
- * verified 2026-06-27. Update here when Anthropic changes published rates.
+ * verified 2026-07-04. Update here when Anthropic changes published rates.
  */
 const PRICING_PER_MTOK: Record<string, { input: number; output: number }> = {
   "claude-fable-5": { input: 10, output: 50 },
+  // Project Glasswing only; same rates as Fable 5.
+  "claude-mythos-5": { input: 10, output: 50 },
   "claude-opus-4-8": { input: 5, output: 25 },
   "claude-opus-4-7": { input: 5, output: 25 },
   "claude-opus-4-6": { input: 5, output: 25 },
   "claude-opus-4-5-20251101": { input: 5, output: 25 },
+  // Introductory pricing through 2026-08-31; reverts to { input: 3, output: 15 }.
+  "claude-sonnet-5": { input: 2, output: 10 },
   "claude-sonnet-4-6": { input: 3, output: 15 },
   "claude-sonnet-4-5-20250929": { input: 3, output: 15 },
   "claude-haiku-4-5-20251001": { input: 1, output: 5 },

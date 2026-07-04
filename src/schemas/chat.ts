@@ -8,5 +8,4 @@ export const ChatSchema = z.object({
   userId: z.string(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
-  // messages:
 });
