@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { Chat } from "@prisma/client";
-import { generateText, validateUIMessages } from "ai";
+import { generateText, Output, validateUIMessages } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { metadataSchema, MyUIMessage } from "@/types/chat";
 import { tools } from "../tools";
@@ -26,7 +26,8 @@ export async function createChatTitle(
     model: anthropic("claude-haiku-4-5-20251001"),
     system:
       "You are a precise text summarizer. Assume text provided is a first message of the user in a conversation and provide a concise, up to 4-5 words summary - title of the possible conversation. Do not add outside knowledge.",
-    prompt: `Please summarize the following text:\n\n${textToSummarize}`,
+    prompt: `Summarize the following text:\n\n${textToSummarize}`,
+    output: Output.text(),
   });
 
   return text;
@@ -111,7 +112,7 @@ export async function getChat({
   };
 }
 
-export async function getChats() {
+export async function getChats(): Promise<Chat[]> {
   const userId = await getUserId();
 
   return await prisma.chat.findMany({
@@ -120,6 +121,14 @@ export async function getChats() {
     },
     orderBy: {
       updatedAt: "desc",
+    },
+  });
+}
+
+export async function deleteChat({ id }: { id: string }): Promise<Chat> {
+  return await prisma.chat.delete({
+    where: {
+      id,
     },
   });
 }

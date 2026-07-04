@@ -45,3 +45,6 @@ export const urlByTitle = Object.fromEntries(
 export const titleByUrl = Object.fromEntries(
   Object.values(routes).map((route) => [route.url, route.title]),
 );
+
+export const NEW_CHAT_TITLE = "New Chat";
+export const SIGN_OUT_TITLE = "Sign Out";

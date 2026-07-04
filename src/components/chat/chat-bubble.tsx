@@ -1,6 +1,7 @@
 import { cn } from "@/lib/cn";
 import { ReactNode } from "react";
 
+// Legacy, is not used
 export function ChatBubble({
   role,
   className,

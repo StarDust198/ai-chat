@@ -46,7 +46,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { ChatContext } from "./chat-context";
 import { DefaultChatTransport } from "ai";
-import { useCreateChat } from "@/lib/query/use-create-chat";
+import { useCreateChat } from "@/lib/query/use-chat-hooks";
 
 interface ChatProps {
   models: AnthropicModel[];
@@ -57,8 +57,6 @@ interface ChatProps {
 const PREFFERED_MODEL = "haiku";
 
 export function Chat({ id, models, initialMessages }: ChatProps) {
-  console.log("render");
-
   const [userMessageText, setUserMessageText] = useState("");
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(() => {
@@ -66,8 +64,6 @@ export function Chat({ id, models, initialMessages }: ChatProps) {
       models.find((model) => model.id.includes(PREFFERED_MODEL))?.id ?? null
     );
   });
-
-  // const router = useRouter();
 
   const createChatMutation = useCreateChat();
   const { messages, sendMessage, status, regenerate, error } =
@@ -99,9 +95,6 @@ export function Chat({ id, models, initialMessages }: ChatProps) {
           userMessage: trimmedMessage,
           id,
         });
-
-        // router.replace(`/chat/${chatId}`, { scroll: false });
-        // window.history.replaceState(null, "", `\/chat/${chatId}`);
       } catch {
         toast("Error", {
           description: "Couldn't create a new chat",
@@ -145,8 +138,6 @@ export function Chat({ id, models, initialMessages }: ChatProps) {
   const selectedModelData = models.find(
     (model) => model.id === selectedModelId,
   );
-
-  // console.log({ models, messages, error, status });
 
   return (
     <div className="h-full flex flex-col gap-4">
@@ -306,7 +297,11 @@ export function Chat({ id, models, initialMessages }: ChatProps) {
 
           <PromptInputSubmit
             status={status === "streaming" ? "streaming" : "ready"}
-            disabled={!userMessageText.trim() || status === "submitted"}
+            disabled={
+              !userMessageText.trim() ||
+              createChatMutation.isPending ||
+              status === "submitted"
+            }
             className="absolute bottom-1 right-1"
           />
         </PromptInput>

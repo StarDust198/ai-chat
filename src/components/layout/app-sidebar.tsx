@@ -22,9 +22,24 @@ import {
   ChatBubbleLeftRightIcon,
   UserPlusIcon,
 } from "@heroicons/react/24/outline";
-import { publicRoutes, RouteData, RouteKey } from "@/constants/routes";
+import {
+  NEW_CHAT_TITLE,
+  publicRoutes,
+  RouteData,
+  RouteKey,
+  SIGN_OUT_TITLE,
+} from "@/constants/routes";
 import { useQuery } from "@tanstack/react-query";
 import { chatsOptions } from "@/lib/query/chats-options";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { Button } from "../ui/button";
+import { EllipsisVertical } from "lucide-react";
+import { useDeleteChat } from "@/lib/query/use-chat-hooks";
 
 export type AppSidebarItem = {
   title: string;
@@ -41,13 +56,12 @@ const routeIconsMap: Record<RouteKey, ReactNode> = {
   signup: <UserPlusIcon />,
 };
 
-const NEW_CHAT_TITLE = "New Chat";
-const SIGN_OUT_TITLE = "Sign Out";
-
 export function AppSidebar() {
   const pathname = usePathname();
   const { state } = useSidebar();
   const { data: chats } = useQuery(chatsOptions());
+
+  const deleteChatMutation = useDeleteChat();
 
   const isExpanded = state === "expanded";
 
@@ -144,18 +158,49 @@ export function AppSidebar() {
               <SidebarMenu>
                 {chats?.map((chat) => {
                   const chatUrl = `/chat/${chat.id}`;
+                  const isActiveChat = pathname === chatUrl;
 
                   return (
-                    <SidebarMenuItem key={chat.id}>
+                    <SidebarMenuItem
+                      key={chat.id}
+                      className="flex items-center gap-2 justify-between"
+                    >
                       <SidebarMenuButton
                         tooltip={chat.title}
-                        isActive={pathname === chatUrl}
+                        isActive={isActiveChat}
                         render={
                           <Link href={chatUrl}>
                             <span className="truncate">{chat.title}</span>
                           </Link>
                         }
                       />
+
+                      {!isActiveChat && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon-xs"
+                                className="shrink-0 md:not-group-hover/menu-item:not-data-popup-open:hidden group-data-[state=collapsed]:hidden"
+                              >
+                                <EllipsisVertical />
+                              </Button>
+                            }
+                          />
+
+                          <DropdownMenuContent>
+                            <DropdownMenuItem
+                              disabled={deleteChatMutation.isPending}
+                              onClick={() =>
+                                deleteChatMutation.mutateAsync({ id: chat.id })
+                              }
+                            >
+                              Delete Chat
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </SidebarMenuItem>
                   );
                 })}
