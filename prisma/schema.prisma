@@ -21,3 +21,31 @@ model Chat {
 
   @@index([userId])
 }
+
+model Document {
+  id        String   @id @default(cuid())
+  userId    String
+  filename  String
+  status    String   @default("pending") // pending | processing | success | error
+  createdAt DateTime @default(now())
+
+  chunks Chunk[]
+
+  @@index([userId])
+}
+
+model Chunk {
+  id         String @id @default(cuid())
+  documentId String
+  content    String
+  // tokenCount Int
+  index      Int    // position within the document — for ordering and dedupe
+  model      String @default("text-embedding-3-small")
+
+  embedding Unsupported("vector(1536)")?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, index])
+  @@index([documentId])
+}

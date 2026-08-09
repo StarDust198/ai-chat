@@ -1,0 +1,15 @@
+Remote Work Policy
+Document owner: People Operations
+Last updated: 2025-11-28
+
+Nordvane is remote-first rather than remote-friendly. There is no office anyone is expected to attend, and decisions are not made in rooms. If a discussion produces a decision, it is written down in the relevant Linear project or in a document, not left in a call recording.
+
+Core hours are 11:00 to 15:00 CET. Employees are expected to be reachable during that window on working days. Outside it, schedules are individual. Meetings scheduled outside core hours require the agreement of everyone invited, and recurring meetings outside core hours are not permitted.
+
+Employees may work from any country where Nordvane can legally employ or contract them. Relocation between countries requires 60 days notice to people operations because it usually changes the employment entity, the tax treatment, and occasionally the salary band. Working temporarily from another country for up to 30 days per year needs only a note to your manager.
+
+The coworking stipend is 150 euros per month, claimed through the expense tool against an invoice. It may not be used for a private office lease. Employees who prefer to work from home may not convert the stipend into cash or equipment.
+
+There are two company offsites per year, typically in Tallinn in May and in a rotating location in October. Attendance is expected but not mandatory. Travel and accommodation are booked centrally by people operations rather than expensed individually, which is the one exception to the standard travel policy.
+
+Asynchronous communication is the default. A question posted in Slack should not be expected to receive an answer within the hour. Anything genuinely urgent goes through the on-call paging path, not through Slack mentions.

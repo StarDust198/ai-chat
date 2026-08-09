@@ -1,0 +1,15 @@
+Relay Retry Semantics and Dead Letter Handling
+Document owner: Engineering
+Last updated: 2026-02-24
+
+When a delivery attempt fails, Relay retries with exponential backoff. There are six attempts in total after the first, at approximately 2 seconds, 8 seconds, 30 seconds, 2 minutes, 15 minutes, and 1 hour. Each interval carries up to 20 percent random jitter to avoid synchronised retry waves across tenants. Total elapsed time from first attempt to final failure is a little under two hours.
+
+A failure is any non-2xx response, a connection error, or a response that takes longer than 10 seconds. Relay does not distinguish between a 500 and a 404 for retry purposes. This is intentional: an endpoint returning 404 during a deploy is common, and treating it as permanent would drop legitimate events.
+
+After the final attempt, the event moves to the dead letter queue for that endpoint. Dead lettered events are retained for 14 days on all plans and can be replayed individually or in bulk from the dashboard or through the API. Replaying resets the attempt counter; a replayed event that fails again goes through the full retry sequence a second time.
+
+Each endpoint has a circuit breaker. Since February 2026 it opens when the failure rate exceeds 50 percent over a rolling 60 second window with a minimum of 20 attempts. Before that change it required 20 consecutive failures, which failed to catch endpoints that were intermittently succeeding. While open, deliveries to that endpoint are held rather than attempted, and a probe request is sent every 30 seconds until one succeeds.
+
+Since February 2026 delivery queues are partitioned per tenant with fair-share scheduling. One tenant's retry volume can no longer delay deliveries for other tenants in the same region. In addition, a tenant whose retry volume exceeds ten times its first-attempt volume is automatically rate limited and the account owner is notified.
+
+Ordering is preserved per endpoint but not across endpoints. If event A fails and event B succeeds, B is not delivered ahead of A to the same endpoint; subsequent events queue behind the retrying event. This surprises people, and it is the single most common support question about retries.

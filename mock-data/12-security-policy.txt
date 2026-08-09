@@ -1,0 +1,15 @@
+Information Security Policy
+Document owner: Engineering
+Last updated: 2025-11-30
+
+Every company laptop must have full disk encryption enabled and a screen lock of no more than five minutes. Personal devices may access email and Slack but never production systems or customer data. There is no exception process for this rule.
+
+All accounts require multi-factor authentication. Hardware keys are provided on request and are strongly preferred for anyone with production access. SMS is not accepted as a second factor for any internal system. Credentials are stored in 1Password only. Credentials in Slack messages, Linear tickets, or code comments are treated as compromised and must be rotated even if the channel was private.
+
+Production access follows least privilege and is granted per role rather than per person. Read access to production databases requires manager approval and is time limited to 12 hours. Write access to production databases outside a migration requires a second engineer present on a call, and the session is recorded. Customer event payloads are treated as customer data and are never copied into a local environment.
+
+Any suspected security incident must be reported to security at nordvane dot eu within one hour of suspicion, not one hour of confirmation. Reporting something that turns out to be nothing has never once been held against anyone here. A suspected incident follows the same severity scale as an operational incident, with the addition that any confirmed unauthorised access to customer data is automatically S1.
+
+New vendors that will store or process customer data require a written review before signing, covering data location, subprocessor list, breach notification terms, and deletion on termination. Vendors that touch only internal data require manager approval only. The vendor register is maintained by finance and reviewed twice a year.
+
+Laptops are wiped remotely and returned to operations on termination. Access is revoked within one hour of the end of the last working day, and within 15 minutes for involuntary departures.

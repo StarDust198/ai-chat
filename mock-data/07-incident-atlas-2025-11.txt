@@ -1,0 +1,16 @@
+Postmortem: Atlas - Relay Delivery Outage in eu-fra
+Incident date: 2025-11-14
+Severity: S1
+Author: Tomas Brenner
+
+Summary. Between 02:11 and 05:58 UTC on 14 November 2025, Relay stopped delivering events to customer endpoints in the eu-fra region. Total duration was three hours and 47 minutes. 1.9 million events were delayed. No events were lost. Other regions were unaffected. The incident is referred to internally as Atlas after the deploy that preceded it.
+
+Impact. 340 tenants had at least one delayed delivery. Of those, 61 had deliveries delayed by more than two hours. Because Relay preserves undelivered events, all affected events were delivered after recovery, but delivery ordering guarantees within an endpoint were not violated. Four customers opened support tickets during the window and two invoked their contractual credit clause.
+
+Cause. The mTLS client certificate used by eu-fra delivery workers to authenticate to the internal queue expired at 02:11 UTC. The certificate had been issued manually in November 2023 with a two year validity and was never added to the automated renewal inventory. Delivery workers failed closed, which was the correct behaviour, and retried indefinitely against a connection they could not establish.
+
+Detection. Nobody was paged for 41 minutes. Delivery success rate alerting was configured on a five minute rolling window with a 40 minute evaluation delay inherited from an earlier alerting migration. The first page fired at 02:52 UTC. A customer had already emailed support at 02:34 UTC, which is the actual first signal and is treated as a detection failure.
+
+Resolution. The certificate was reissued manually at 05:44 UTC and workers recovered as connections re-established. The backlog drained over the following 26 minutes.
+
+Actions taken. All manually issued internal certificates were inventoried and moved to automated renewal with 30 day expiry alerting. The alerting evaluation delay was reduced from 40 minutes to 4 minutes. A synthetic end-to-end delivery probe was added per region, running every 60 seconds. The certificate inventory is now reviewed quarterly by the platform team.

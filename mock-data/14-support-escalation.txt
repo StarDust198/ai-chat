@@ -1,0 +1,15 @@
+Customer Support Escalation Policy
+Document owner: Support
+Last updated: 2026-01-18
+
+Support operates 09:00 to 18:00 in three coverage zones, giving effective coverage from 22:00 to 18:00 UTC on working days. Outside those hours only paging through the on-call path reaches a human, and that path is reserved for S1 and S2 conditions.
+
+First response targets differ by plan. Starter has no guaranteed response and is directed to the community forum and documentation. Growth is eight business hours. Scale is two business hours, or 30 minutes for a reported S1. Enterprise targets are defined per agreement; Kirren Retail's agreement specifies 15 minutes for S1 at any hour including weekends.
+
+Support may declare an S1 or S2 directly without engineering agreement. This is deliberate. A support engineer who believes delivery is broken for multiple tenants pages immediately and the severity is corrected later if they were wrong. There is no penalty for a false page and no requirement to check with anyone first.
+
+Escalation path for anything support cannot resolve within one hour: post in the engineering channel with the tenant ID, the region, the affected endpoint, and what has already been ruled out. If it is an S1 or S2, page the primary on-call instead. Do not send direct messages to individual engineers about customer issues, because the context is then invisible to whoever picks it up next.
+
+The most common ticket categories in 2025 were, in order: signature verification failures on the customer side, confusion about retry ordering within an endpoint, unexpected overage charges, and endpoints timing out because the receiver does work before responding. The first and last are almost always resolved by pointing at the quickstart. The second is genuinely counterintuitive and is worth explaining patiently rather than linking.
+
+Service credits are never promised by support. Any credit discussion goes to the account owner in sales, who checks the individual agreement. Support may confirm that an incident occurred and state its duration.

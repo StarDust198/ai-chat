@@ -1,0 +1,16 @@
+Postmortem: Webhook Backlog in us-iad
+Incident date: 2026-02-03
+Severity: S1
+Author: Marta Lindqvist
+
+Summary. Beginning at 14:20 UTC on 3 February 2026, event delivery in us-iad fell progressively behind. At peak, delivery latency reached 11 hours and 12 minutes. The backlog fully drained at 05:31 UTC on 4 February. No events were lost. eu-tll, eu-fra, and ap-sin were unaffected.
+
+Impact. All 1,204 tenants in us-iad experienced elevated delivery latency. 88 tenants exceeded four hours of delay. Kirren Retail, the tenant whose traffic triggered the condition, was itself among the worst affected. Seventeen support tickets were opened. Three customers on the Scale plan received service credits under their agreement.
+
+Cause. Kirren Retail deployed a change that caused their receiving endpoint to return HTTP 500 for approximately 96 percent of requests while still returning 200 for the remainder. Relay's retry policy treated these as transient and retried each failed delivery up to six times. Because the endpoint was intermittently succeeding, the circuit breaker never opened; it requires 20 consecutive failures and never saw them. Retried deliveries were enqueued into the shared regional delivery queue, where they competed with first-attempt deliveries from every other tenant in the region.
+
+Detection. The first page fired at 14:31 UTC, eleven minutes after onset, from the per-region delivery latency probe added after Atlas. Detection worked as intended. Diagnosis took considerably longer: it was 16:05 UTC before the single-tenant origin was identified, because the delivery latency dashboard aggregated across tenants and had no per-tenant breakdown.
+
+Resolution. Kirren Retail's endpoint was manually rate limited at 16:20 UTC, which stopped the backlog growing. Their engineers rolled back the endpoint change at 18:40 UTC. The remaining backlog drained without further intervention.
+
+Actions taken. Delivery queues were partitioned per tenant with a fair-share scheduler, shipped 19 February 2026. The circuit breaker was changed from 20 consecutive failures to a 50 percent failure rate over a 60 second window. Per-tenant delivery latency was added to the primary dashboard. A tenant-level rate limit is now applied automatically when retry volume exceeds 10 times the tenant's first-attempt volume.

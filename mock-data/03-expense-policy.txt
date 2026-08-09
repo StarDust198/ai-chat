@@ -1,0 +1,15 @@
+Expense and Reimbursement Policy
+Document owner: Finance
+Last updated: 2025-10-20
+
+Nordvane operates on a principle of stated trust. Anything you would be comfortable explaining to the whole company in a Slack channel is almost certainly fine. Anything you would rather explain privately is almost certainly not. Receipts are required for every claim regardless of amount.
+
+Purchases under 200 euros need no prior approval. Between 200 and 1000 euros require written manager approval in the expense tool before the purchase. Anything above 1000 euros requires approval from both the manager and finance. Splitting a single purchase into smaller claims to stay under a threshold is treated as a policy violation rather than a rounding decision.
+
+Hardware is budgeted separately from general expenses. Each employee has a 2000 euro hardware allowance refreshed every three years. Unused allowance does not carry over. Replacement of damaged or stolen equipment is handled outside the allowance and requires a short written incident note to operations.
+
+Travel is booked by the employee. Economy flights under six hours, premium economy above six hours. Hotels up to 180 euros per night in western Europe and North America, 120 euros elsewhere. There is no per diem. Meals are reimbursed against receipts up to 60 euros per day when travelling.
+
+Coworking is reimbursed monthly on submission of an invoice. Home internet, home electricity, and home office rent are not reimbursed. Conference tickets are reimbursed in full when the employee agrees to write an internal summary within two weeks of returning.
+
+Reimbursements are paid with the following month's payroll. Claims submitted after the 25th of a month roll into the following cycle. Claims older than 90 days are not accepted without a written explanation to finance.

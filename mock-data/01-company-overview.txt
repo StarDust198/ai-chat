@@ -1,0 +1,13 @@
+Nordvane OU - Company Overview
+Document owner: People Operations
+Last updated: 2026-01-12
+
+Nordvane OU is an event infrastructure company registered in Tallinn, Estonia. It was founded in March 2019 by Anneli Sarapuu (CEO) and Tomas Brenner (CTO) after both left a payments company where they had spent four years rebuilding a webhook delivery system three separate times. The company has been profitable since Q3 2023 and has taken no external investment beyond a seed round of 1.2 million euros in 2020.
+
+As of January 2026 Nordvane employs 82 people across 14 countries. There is no headquarters building. The registered address in Tallinn is a shared office used for legal correspondence and for the two annual company offsites. Roughly 60 percent of staff are in engineering, 15 percent in support, and the remainder split between sales, people operations, and finance.
+
+The company sells three products. Relay is the core event delivery platform and has been generally available since November 2020. Signal is a delivery observability add-on released in June 2024 that provides per-endpoint latency and failure analytics. Vault was a secrets storage product; its sunset was announced in September 2025 and it reaches end of life on 30 June 2026. New Vault signups were disabled in October 2025.
+
+Standard employment terms for full-time staff include 25 days of paid annual leave, a monthly coworking stipend, and a hardware refresh cycle managed by the operations team. Contractors are engaged through a separate agreement and are not covered by the internal policies in this handbook.
+
+Nordvane operates in four delivery regions: eu-tll, eu-fra, us-iad, and ap-sin. Customers choose a primary region at signup. Cross-region failover is available on the Scale plan and above. The largest single customer by event volume is Kirren Retail, which has been on a negotiated Enterprise agreement since 2022.
