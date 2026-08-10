@@ -7,7 +7,6 @@ const providerOptions = {
   },
 };
 
-/** Batch — for ingesting document chunks. */
 export async function embedChunks(texts: string[]): Promise<number[][]> {
   const { embeddings, usage, responses } = await embedMany({
     model: EMBEDDING_MODEL,
@@ -25,7 +24,6 @@ export async function embedChunks(texts: string[]): Promise<number[][]> {
   return embeddings;
 }
 
-/** Single — for the search query in Part 8. */
 export async function embedQuery(text: string): Promise<number[]> {
   const { embedding } = await embed({
     model: EMBEDDING_MODEL,

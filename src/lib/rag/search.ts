@@ -1,7 +1,7 @@
 import { prisma } from "../prisma";
 import { embedQuery } from "./embeddings";
 
-type Hit = {
+export type SearchMatch = {
   id: string;
   content: string;
   documentId: string;
@@ -9,15 +9,15 @@ type Hit = {
   distance: number;
 };
 
-export async function search(
+export async function semanticSearch(
   query: string,
   userId: string,
   { limit = 5, maxDistance = 0.6 } = {},
-): Promise<Hit[]> {
+): Promise<SearchMatch[]> {
   const queryVector = await embedQuery(query);
   const vec = JSON.stringify(queryVector);
 
-  return prisma.$queryRaw<Hit[]>`
+  return prisma.$queryRaw<SearchMatch[]>`
     SELECT
       c.id,
       c.content,
@@ -26,11 +26,12 @@ export async function search(
       c.embedding <=> ${vec}::vector AS distance
     FROM "Chunk" c
     JOIN "Document" d ON d.id = c."documentId"
-    -- WHERE d."userId" = ${userId}
-    --   AND c.embedding IS NOT NULL
     WHERE c.embedding IS NOT NULL
       AND c.embedding <=> ${vec}::vector < ${maxDistance}
     ORDER BY c.embedding <=> ${vec}::vector
     LIMIT ${limit}
   `;
 }
+
+// -- WHERE d."userId" = ${userId}
+// --   AND c.embedding IS NOT NULL

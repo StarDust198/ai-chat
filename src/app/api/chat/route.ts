@@ -13,6 +13,7 @@ import { tools } from "@/lib/tools";
 import { getChat, saveChat, validateMessages } from "@/lib/actions/chats";
 import { MyUIMessage } from "@/types/chat";
 import { auth } from "@clerk/nextjs/server";
+import { SearchMatch, semanticSearch } from "@/lib/rag/search";
 
 const schema = z.object({
   // Message is validated below
@@ -22,8 +23,30 @@ const schema = z.object({
   chatId: z.string(),
 });
 
+const createPrompt = (question: string, searchResults: SearchMatch[]) => {
+  return `
+    You are about to be given a set of documents, matching user's request.
+    Your task is to answer user's question using only the information in the documents.
+    If there are no documents - say that there's no information available.
+
+    Here is the user's question:
+    <question>
+      ${question}
+    </question>
+    
+    Here are the document parts in the matching order:
+    <documents>
+      ${searchResults
+        .map((match) => {
+          return `<document>${match.content}</document>`;
+        })
+        .join("\n\n")}
+    </documents>
+`;
+};
+
 export async function POST(req: Request) {
-  const { isAuthenticated } = await auth();
+  const { isAuthenticated, userId } = await auth();
 
   if (!isAuthenticated) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -39,6 +62,20 @@ export async function POST(req: Request) {
     );
   }
   const { message, modelId, chatId } = parsed.data;
+
+  // ! Addition
+  if (message.parts[0].type === "text") {
+    const messageText = message.parts[0].text;
+    const searchResults = await semanticSearch(messageText, userId, {
+      limit: 7,
+      maxDistance: 0.8,
+    });
+
+    console.log("Chat handler", { searchResults });
+
+    message.parts[0].text = createPrompt(messageText, searchResults);
+  }
+  // ! Addition
 
   const chat = await getChat({ chatId });
 
