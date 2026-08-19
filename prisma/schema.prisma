@@ -34,6 +34,59 @@ model Document {
   @@index([userId])
 }
 
+/// One page re-read by a model because the layout defeated geometric reconstruction —
+/// both the job and its result.
+///
+/// The row is written before the batch is created, so extraction survives a stopped
+/// server: the batch id lives here rather than in a variable, and any later process can
+/// finish work an earlier one started.
+///
+/// It is a job while in flight and a permanent record once collected — deliberately not
+/// named PageExtractionJob, because a table named for work invites a cleanup that deletes
+/// finished rows. A collected row is the cache and the audit trail: purging it silently
+/// re-pays for every page. Only pending, failed, and expired rows are ever disposable.
+///
+/// Per page rather than per document: raising a detector threshold makes one more page
+/// complex, and only that page should have to be paid for again.
+///
+/// Keyed by content, not by user — two users uploading identical bytes share a row. That
+/// is correct rather than a leak: a hit already requires possessing the same file.
+model PageExtraction {
+  fileHash String // sha256 of the PDF bytes
+  page     Int // 1-based, matches PdfPage.page
+  model    String
+  prompt   String // sha256 of the prompt template, so editing it re-reads
+  /// Why the detector flagged this page — the LayoutAssessment reasons, copied at write.
+  ///
+  /// Read by people rather than by code: it answers the first question asked of a bad
+  /// citation, which is why this page was sent to a model at all, and keeps "which
+  /// reasons fail most often" answerable. A column rather than JSON so that stays a query.
+  reasons String[]
+
+  /// The model's raw blocks, exactly as returned. Raw rather than mapped paragraphs:
+  /// model output is the least trustworthy thing in the pipeline and the only part that
+  /// cannot be reproduced by re-running code, so when a citation looks wrong this column
+  /// says whether the model or the chunker was at fault.
+  ///
+  /// Not nullable, which is the point of the whole table: a row exists only for a page
+  /// that came back well formed and about the right page. There is no status to filter on
+  /// and no null to serve by forgetting to. Faithfulness is still checked on read against
+  /// the page as parsed — a stored row is trusted for cost, not for correctness.
+  blocks Json
+
+  createdAt DateTime @default(now())
+
+  // The content identity is the identity, and rows are written once and never changed.
+  //
+  // Nothing records a page that is being read or one that failed. An interrupted read
+  // leaves no trace to clean up, and a page that failed validation is simply read again
+  // the next time the document is ingested — which is what should happen, since a
+  // rejection is more often a sampling accident than a property of the page. The cost of
+  // that retry is bounded and rare; the cost of recording it was a status column, a claim
+  // protocol, and a stale-claim rule to undo the deadlock the claim protocol introduced.
+  @@id([fileHash, page, model, prompt])
+}
+
 model Chunk {
   id         String @id @default(cuid())
   documentId String

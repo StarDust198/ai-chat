@@ -7,3 +7,4 @@ export const DocumentStatus = {
   success: "success",
   error: "error",
 } as const;
+

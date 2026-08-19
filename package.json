@@ -11,6 +11,7 @@
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.0",
     "@ai-sdk/react": "^4.0.4",
+    "@anthropic-ai/sdk": "^0.117.1",
     "@base-ui/react": "^1.4.1",
     "@clerk/nextjs": "^7.4.1",
     "@heroicons/react": "^2.2.0",
