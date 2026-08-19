@@ -13,6 +13,22 @@ export interface Line {
   items: StructuredTextItem[];
 }
 
+/** Rectangle in PDF space, origin bottom-left — the space item coordinates use. */
+export interface BBox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+export interface Paragraph {
+  text: string;
+  /** Largest font size in the paragraph — how a heading is told from body text. */
+  fontSize: number;
+  /** Where it sits on the page, for highlighting a cited passage in a viewer. */
+  bbox: BBox;
+}
+
 /** Baselines within this fraction of a font size belong to the same visual line. */
 const BASELINE_TOLERANCE = 0.5;
 /** A single line may not span more than this many font sizes vertically. */
@@ -35,14 +51,15 @@ export function itemsToLines(
 ): Line[] {
   const sorted = items
     .filter((item) => item.str.trim().length > 0)
-    .sort((a, b) => b.y - a.y || a.x - b.x); // top-to-bottom, then left-to-right
+    // Top-to-bottom, then left-to-right.
+    .sort((left, right) => right.y - left.y || left.x - right.x);
 
   const lines: Line[] = [];
 
-  // Compared against the *previous item*, not the line's first item: a gradually
-  // slanting line drifts out of range of its anchor but never out of range of its
-  // immediate neighbour. lineTop caps the total span so that drift can't ratchet
-  // an entire slanted page into one line.
+  // Baselines are compared against the previous item rather than the line's first
+  // item: a gradually slanting line drifts out of range of its anchor but never out
+  // of range of its immediate neighbour. lineTop caps the total span so that drift
+  // cannot ratchet an entire slanted page into one line.
   let previousY = Number.POSITIVE_INFINITY;
   let lineTop = Number.POSITIVE_INFINITY;
 
@@ -70,12 +87,13 @@ export function itemsToLines(
   }
 
   for (const line of lines) {
-    line.items.sort((a, b) => a.x - b.x);
+    line.items.sort((left, right) => left.x - right.x);
     line.x = line.items[0].x;
-    // Median, not the first item's baseline: a superscript anchor would misreport
-    // the line's position, and stripBoilerplate tests y against the margin bands.
-    line.y = median(line.items.map((i) => i.y));
-    line.fontSize = Math.max(...line.items.map((i) => i.fontSize));
+    // The median baseline, not the first item's: a line that opens with a superscript
+    // would otherwise report the superscript's position as its own, and callers test
+    // that position against the page's margin bands.
+    line.y = median(line.items.map((item) => item.y));
+    line.fontSize = Math.max(...line.items.map((item) => item.fontSize));
     line.text = joinWithGaps(line.items);
   }
 
@@ -92,7 +110,7 @@ export function itemsToLines(
 export function joinWithGaps(items: StructuredTextItem[]): string {
   if (items.length === 0) return "";
 
-  let out = items[0].str;
+  let text = items[0].str;
 
   for (let i = 1; i < items.length; i++) {
     const previous = items[i - 1];
@@ -100,25 +118,59 @@ export function joinWithGaps(items: StructuredTextItem[]): string {
     const gap = current.x - (previous.x + previous.width);
     const em = Math.max(previous.fontSize, current.fontSize);
 
-    if (gap > em * SPACE_GAP) out += " ";
-    out += current.str;
+    if (gap > em * SPACE_GAP) text += " ";
+    text += current.str;
   }
 
-  // Collapses any doubled whitespace, including spaces already inside item.str.
-  // Load-bearing — do not remove it in favour of guards at the append site.
-  return out.replace(/\s+/g, " ").trim();
+  // An item's own str can begin or end with spaces, so inferred gaps are not the
+  // only source of whitespace here and doubled spaces are routine.
+  return text.replace(/\s+/g, " ").trim();
 }
 
 /**
- * Splits lines into paragraphs on vertical gaps larger than the document's normal
- * leading. PDF has no paragraph concept; this is where it gets reconstructed, and
- * it is the reason plain extractText output is not sufficient for chunking.
+ * Collapses a run of lines into one paragraph. The box is measured from items rather
+ * than baselines: a line's y is its baseline, so a baseline-derived box clips every
+ * ascender.
  */
-export function linesToParagraphs(lines: Line[], gapFactor = 1.4): string[] {
+const toParagraph = (lines: Line[]): Paragraph | null => {
+  const text = lines
+    .map((line) => line.text)
+    .join(" ")
+    .trim();
+
+  if (!text) return null;
+
+  const items = lines.flatMap((line) => line.items);
+
+  return {
+    text,
+    fontSize: Math.max(...lines.map((line) => line.fontSize)),
+    bbox: {
+      x0: Math.min(...items.map((item) => item.x)),
+      y0: Math.min(...items.map((item) => item.y)),
+      x1: Math.max(...items.map((item) => item.x + item.width)),
+      y1: Math.max(...items.map((item) => item.y + item.height)),
+    },
+  };
+};
+
+/**
+ * Splits lines into paragraphs on vertical gaps larger than the document's normal
+ * leading. PDF stores no paragraph structure at all; this is where it is
+ * reconstructed, and it is why positioned items are worth the trouble over plain
+ * extracted text.
+ */
+export function linesToParagraphs(lines: Line[], gapFactor = 1.4): Paragraph[] {
   if (lines.length === 0) return [];
 
-  const paragraphs: string[] = [];
-  let buffer: string[] = [];
+  const paragraphs: Paragraph[] = [];
+  let buffer: Line[] = [];
+
+  const flush = () => {
+    const paragraph = buffer.length > 0 ? toParagraph(buffer) : null;
+    if (paragraph) paragraphs.push(paragraph);
+    buffer = [];
+  };
 
   for (const [i, line] of lines.entries()) {
     if (i > 0) {
@@ -132,21 +184,18 @@ export function linesToParagraphs(lines: Line[], gapFactor = 1.4): string[] {
       const sizeChanged =
         Math.abs(previous.fontSize - line.fontSize) > em * 0.15;
 
-      if (wideGap || sizeChanged) {
-        paragraphs.push(buffer.join(" "));
-        buffer = [];
-      }
+      if (wideGap || sizeChanged) flush();
     }
-    buffer.push(line.text);
+    buffer.push(line);
   }
 
-  if (buffer.length > 0) paragraphs.push(buffer.join(" "));
-  return paragraphs.filter((p) => p.trim().length > 0);
+  flush();
+  return paragraphs;
 }
 
 export function median(values: number[]): number {
   if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
+  const sorted = [...values].sort((left, right) => left - right);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 === 0
     ? (sorted[mid - 1] + sorted[mid]) / 2
@@ -156,7 +205,7 @@ export function median(values: number[]): number {
 /**
  * Known limitation: RTL and vertical scripts.
  *
- * `a.x - b.x` and `current.x - (previous.x + previous.width)` both assume text flows
- * left-to-right. For items where `dir` is "rtl" or "ttb" the sort order and the gap
- * arithmetic are both wrong. Detectable via item.dir if a document ever needs it.
+ * `left.x - right.x` and `current.x - (previous.x + previous.width)` both assume text
+ * flows left-to-right. For items where `dir` is "rtl" or "ttb" the sort order and the
+ * gap arithmetic are both wrong. Detectable via item.dir if a document ever needs it.
  */

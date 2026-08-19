@@ -1,33 +1,22 @@
-import { stripBoilerplate } from "@/lib/pdf/boilerplate";
-import { extractTextFromPDF, extractTextItemsFromPDF } from "@/lib/pdf/extract";
-import { itemsToLines, linesToParagraphs } from "@/lib/pdf/lines";
+import { pdfToDocument } from "@/lib/pdf/document";
 import { readFile } from "node:fs/promises";
 
 const main = async () => {
-  // const buffer = await fetch(
-  //   "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-  // ).then((res) => res.arrayBuffer());
-  const { buffer } = await readFile("./mock-data/pdf/01-company-overview.pdf");
-
-  // const fileBuffer = await readFile("./mock-data/pdf/01-company-overview.pdf");
-  // const buffer = fileBuffer.buffer.slice(
-  //   fileBuffer.byteOffset,
-  //   fileBuffer.byteOffset + fileBuffer.byteLength,
+  // const bytes = new Uint8Array(
+  //   await fetch(
+  //     "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+  //   ).then((res) => res.arrayBuffer()),
   // );
+  const bytes = await readFile("./mock-data/pdf/01-company-overview.pdf");
 
-  // const { totalPages, text } = await extractTextFromPDF(buffer);
-  const { totalPages, items, heights } = await extractTextItemsFromPDF(buffer);
+  const { title, totalPages, pages } = await pdfToDocument(bytes);
 
-  const { pages } = stripBoilerplate(
-    items.map((pageItems, i) => itemsToLines(pageItems, i + 1)),
-    heights,
-  );
-
-  console.log(`Total pages: ${totalPages}`);
-  // console.log(text);
-  console.log(linesToParagraphs(pages[0]));
-  // console.log(heights);
-  // console.log(pdf);
+  console.log(`${title ?? "(untitled)"} — ${totalPages} pages`);
+  for (const { page, paragraphs } of pages) {
+    console.log(`\n--- page ${page} — ${paragraphs.length} paragraphs`);
+    for (const { heading, text } of paragraphs)
+      console.log(`  [${heading ?? "—"}] ${text.slice(0, 90)}`);
+  }
 };
 
 main();
