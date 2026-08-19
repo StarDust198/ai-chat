@@ -1,5 +1,6 @@
 import { stripBoilerplate } from "./boilerplate";
 import { extractTextItemsFromPDF } from "./extract";
+import { assessLayout, type LayoutAssessment } from "./layout";
 import {
   itemsToLines,
   joinWithGaps,
@@ -12,9 +13,15 @@ import {
 export interface PdfParagraph {
   text: string;
   /**
+   * What this paragraph is. "table" can only ever come from a model: position and
+   * font size cannot tell a table row from a paragraph, which is why a page holding
+   * one is routed away from this reconstruction in the first place.
+   */
+  kind: "heading" | "paragraph" | "table";
+  /**
    * The section heading this paragraph sits under, carried forward across page
-   * boundaries — page 2 of a section that began on page 1 keeps that heading.
-   * Null before the document's first heading.
+   * boundaries — page 2 of a section that began on page 1 keeps that heading. Null
+   * before the document's first heading. Filled in by threadHeadings.
    */
   heading: string | null;
   /** Where it sits on the page. Null when the text did not come from the layout. */
@@ -22,7 +29,7 @@ export interface PdfParagraph {
   /**
    * "layout" — reconstructed from text positions on the page. "model" — extracted by
    * an LLM because the layout defeated reconstruction, as tables and multi-column
-   * pages do. A citation should know which of the two it is quoting.
+   * pages do. Answers who decided, where kind answers what was decided.
    */
   source: "layout" | "model";
 }
@@ -43,6 +50,12 @@ export interface PdfPage {
    * bands are still correct; the reading order is not.
    */
   rotation: number;
+  /**
+   * Whether the paragraphs below can be trusted. A "complex" page still carries
+   * layout-derived paragraphs — they are the fallback — but its columns, table cells,
+   * or scanned content need extracting by other means before they are worth citing.
+   */
+  layout: LayoutAssessment;
   paragraphs: PdfParagraph[];
 }
 
@@ -53,7 +66,6 @@ export interface PdfDocument {
    * candidate, in which case the caller should fall back to the filename.
    */
   title: string | null;
-  totalPages: number;
   pages: PdfPage[];
 }
 
@@ -120,7 +132,7 @@ const pageLabel = (raw: string | undefined, page: number): string | null => {
 export async function pdfToDocument(
   data: Uint8Array | ArrayBuffer,
 ): Promise<PdfDocument> {
-  const { totalPages, items, heights, rotations, labels } =
+  const { items, heights, rotations, hasImages, labels } =
     await extractTextItemsFromPDF(data);
 
   // Page numbers are 1-based from here down; they reach the reader in citations.
@@ -131,9 +143,6 @@ export async function pdfToDocument(
   const bodySize = median(pages.flat().map((line) => line.fontSize));
   const title = deriveTitle(pages[0] ?? [], removed, heights[0], bodySize);
 
-  // Heading state runs across pages: a section that starts on page 1 and continues
-  // on page 2 keeps its heading on both.
-  let heading: string | null = null;
   const pdfPages: PdfPage[] = [];
 
   for (const [i, pageLines] of pages.entries()) {
@@ -143,14 +152,12 @@ export async function pdfToDocument(
     // spans a page break cannot be attributed to a single page, and a citation needs
     // exactly one.
     for (const paragraph of linesToParagraphs(pageLines)) {
-      // Headings are set larger than body text. The title is larger still but names
-      // the document rather than a section, and PdfDocument.title already carries it.
-      if (paragraph.fontSize > bodySize && paragraph.text !== title)
-        heading = paragraph.text;
-
       paragraphs.push({
         text: paragraph.text,
-        heading,
+        // The only evidence available here is size: anything set larger than the
+        // body is a heading, and nothing distinguishes a table row from prose.
+        kind: paragraph.fontSize > bodySize ? "heading" : "paragraph",
+        heading: null,
         bbox: paragraph.bbox,
         source: "layout",
       });
@@ -160,29 +167,39 @@ export async function pdfToDocument(
       page: i + 1,
       label: pageLabel(labels?.[i], i + 1),
       rotation: rotations[i],
+      // Assessed on the cleaned lines: a running footer spaces its fields across the
+      // page and would read as tabular on every page of a document that has one.
+      layout: assessLayout(pageLines, rotations[i], hasImages[i]),
       paragraphs,
     });
   }
 
-  warnOnSidewaysPages(pdfPages);
+  threadHeadings(pdfPages, title);
 
-  return { title, totalPages, pages: pdfPages };
+  return { title, pages: pdfPages };
 }
 
 /**
- * A sideways page still parses into plausible-looking text, so nothing downstream can
- * tell that its lines came out in the wrong order. A warning is the only signal
- * available.
+ * Gives every paragraph the heading it sits under, carrying it across page
+ * boundaries — page 2 of a section that began on page 1 keeps that heading.
+ *
+ * Runs over the whole document rather than inside the page loop because it has to be
+ * run again whenever paragraphs are replaced: a page re-extracted by other means
+ * contributes its own headings, and every page after it inherits from there.
+ *
+ * Reads kind rather than font size, so it behaves the same on paragraphs that never
+ * had a font size to measure.
  */
-function warnOnSidewaysPages(pages: PdfPage[]) {
-  const sideways = pages.filter(
-    ({ rotation }) => rotation === 90 || rotation === 270,
-  );
+export function threadHeadings(pages: PdfPage[], title: string | null) {
+  let heading: string | null = null;
 
-  if (sideways.length > 0)
-    console.warn(
-      `pdfToDocument: page(s) ${sideways.map(({ page }) => page).join(", ")} ` +
-        `carry /Rotate 90 or 270. If their text was authored in the rotated frame, ` +
-        `the reading order of this output is wrong.`,
-    );
+  for (const page of pages)
+    for (const paragraph of page.paragraphs) {
+      // The title is set larger than any heading, but it names the document rather
+      // than a section and PdfDocument.title already carries it.
+      if (paragraph.kind === "heading" && paragraph.text !== title)
+        heading = paragraph.text;
+
+      paragraph.heading = heading;
+    }
 }

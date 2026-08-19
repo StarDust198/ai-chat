@@ -1,0 +1,41 @@
+%PDF-1.7
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Rotate 270 /Contents 5 0 R /Resources << /Font << /F1 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Rotate 270 /Contents 5 0 R /Resources << /Font << /F1 6 0 R >> >> >>
+endobj
+5 0 obj
+<<  /Length 384 >>
+stream
+BT /F1 11 Tf 50 800 Td (Running header on every page) Tj ET
+BT /F1 11 Tf 50 700 Td (Body paragraph that repeats verbatim on both pages) Tj ET
+BT /F1 11 Tf 50 620 Td (Second body line also repeated on both pages) Tj ET
+BT /F1 11 Tf 50 560 Td (Third body line repeated as well) Tj ET
+BT /F1 11 Tf 50 300 Td (Unique middle content) Tj ET
+BT /F1 11 Tf 50 40 Td (Footer CONFIDENTIAL) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000121 00000 n 
+0000000259 00000 n 
+0000000397 00000 n 
+0000000833 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+903
+%%EOF

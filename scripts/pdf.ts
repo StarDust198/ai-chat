@@ -7,13 +7,15 @@ const main = async () => {
   //     "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
   //   ).then((res) => res.arrayBuffer()),
   // );
-  const bytes = await readFile("./mock-data/pdf/01-company-overview.pdf");
+  const bytes = await readFile("./mock-data/pdf/15-glossary.pdf");
 
-  const { title, totalPages, pages } = await pdfToDocument(bytes);
+  const { title, pages } = await pdfToDocument(bytes);
 
-  console.log(`${title ?? "(untitled)"} — ${totalPages} pages`);
-  for (const { page, paragraphs } of pages) {
-    console.log(`\n--- page ${page} — ${paragraphs.length} paragraphs`);
+  console.log(`${title ?? "(untitled)"} — ${pages.length} pages`);
+  for (const { page, paragraphs, layout } of pages) {
+    console.log(
+      `\n--- page ${page} — ${paragraphs.length} paragraphs, layout: ${JSON.stringify(layout)}`,
+    );
     for (const { heading, text } of paragraphs)
       console.log(`  [${heading ?? "—"}] ${text.slice(0, 90)}`);
   }

@@ -100,26 +100,41 @@ export function itemsToLines(
   return lines;
 }
 
+export interface ItemGap {
+  /** Empty space before this item, in points. */
+  gap: number;
+  /** Font size the gap should be judged against. */
+  em: number;
+  item: StructuredTextItem;
+}
+
 /**
- * Concatenates a line's items, inferring spaces from horizontal gaps.
+ * The empty space before each item on a line, after the first.
+ *
+ * The one definition of what a gap between two items is — word spacing, a column
+ * gutter, and the space between table cells are all read off this.
  *
  * The em is taken from the larger of the two adjacent items: scaling by the current
- * item alone makes the threshold collapse at a superscript (6pt * 0.25 = 1.5pt, which
+ * item alone makes any threshold collapse at a superscript (6pt * 0.25 = 1.5pt, which
  * ordinary kerning exceeds), producing "word ¹" instead of "word¹".
  */
+export function internalGaps(items: StructuredTextItem[]): ItemGap[] {
+  return items.slice(1).map((item, i) => ({
+    gap: item.x - (items[i].x + items[i].width),
+    em: Math.max(items[i].fontSize, item.fontSize),
+    item,
+  }));
+}
+
+/** Concatenates a line's items, inferring spaces from the horizontal gaps. */
 export function joinWithGaps(items: StructuredTextItem[]): string {
   if (items.length === 0) return "";
 
   let text = items[0].str;
 
-  for (let i = 1; i < items.length; i++) {
-    const previous = items[i - 1];
-    const current = items[i];
-    const gap = current.x - (previous.x + previous.width);
-    const em = Math.max(previous.fontSize, current.fontSize);
-
+  for (const { gap, em, item } of internalGaps(items)) {
     if (gap > em * SPACE_GAP) text += " ";
-    text += current.str;
+    text += item.str;
   }
 
   // An item's own str can begin or end with spaces, so inferred gaps are not the
@@ -128,11 +143,11 @@ export function joinWithGaps(items: StructuredTextItem[]): string {
 }
 
 /**
- * Collapses a run of lines into one paragraph. The box is measured from items rather
- * than baselines: a line's y is its baseline, so a baseline-derived box clips every
- * ascender.
+ * Collapses one already-grouped run of lines into a paragraph. The box is measured
+ * from items rather than baselines: a line's y is its baseline, so a baseline-derived
+ * box clips every ascender.
  */
-const toParagraph = (lines: Line[]): Paragraph | null => {
+const groupToParagraph = (lines: Line[]): Paragraph | null => {
   const text = lines
     .map((line) => line.text)
     .join(" ")
@@ -167,7 +182,7 @@ export function linesToParagraphs(lines: Line[], gapFactor = 1.4): Paragraph[] {
   let buffer: Line[] = [];
 
   const flush = () => {
-    const paragraph = buffer.length > 0 ? toParagraph(buffer) : null;
+    const paragraph = buffer.length > 0 ? groupToParagraph(buffer) : null;
     if (paragraph) paragraphs.push(paragraph);
     buffer = [];
   };
