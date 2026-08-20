@@ -224,3 +224,32 @@ export function median(values: number[]): number {
  * flows left-to-right. For items where `dir` is "rtl" or "ttb" the sort order and the
  * gap arithmetic are both wrong. Detectable via item.dir if a document ever needs it.
  */
+
+/**
+ * Known limitation: run-in terms are not split from their definitions.
+ *
+ * A definition list sets the term in bold and runs the definition on after it — "**Atlas.**
+ * The internal name for…". This layer produces one paragraph per entry, which is right, but
+ * nothing marks the term, so downstream every entry looks like ordinary prose and the chunker
+ * merges a page of them into a few slabs. Retrieval then matches a vector holding eight
+ * unrelated definitions.
+ *
+ * Not fixed because no document in the corpus reaches this path: the one definition list is
+ * two-column, so it is routed to the model reader, which is told to return the term as its own
+ * heading block. This is the single-column case, and it is unexercised.
+ *
+ * What the investigation found, so it is not repeated:
+ *
+ * - The signal is a font *resource* change, not a font name or a size. Raw PDF.js reports
+ *   `g_d0_f5` for "Atlas." and `g_d0_f7` for the definition after it — same declared family,
+ *   same 10.5pt. Size cannot catch it, which is why the `fontSize > bodySize` rule in
+ *   document.ts classifies a run-in term as body text.
+ * - unpdf's StructuredTextItem normalises fontFamily to "serif"/"sans-serif" and drops
+ *   fontName entirely, so the resource identity has to come from a raw page.getTextContent()
+ *   read zipped alongside unpdf's items — guarded by `item.str === rawItem.str`, so that a
+ *   future unpdf change degrades to today's behaviour instead of silently pairing the wrong
+ *   coordinates. Recomputing x, y and fontSize from the transform matrix instead is the trap:
+ *   every threshold in layout.ts and boilerplate.ts is calibrated against unpdf's numbers.
+ * - The split has to happen here rather than in document.ts, because Paragraph does not carry
+ *   its items and by then the evidence is gone.
+ */

@@ -23,22 +23,48 @@ const schema = z.object({
   chatId: z.string(),
 });
 
+const escapeAttribute = (value: string) =>
+  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+/**
+ * Where a passage came from, as attributes the model can quote back.
+ *
+ * pageLabel wins over page when it exists, because it is what the page prints on itself —
+ * citing "page 4" for a page numbered iv sends the reader to the wrong place. Empty
+ * fields are omitted rather than rendered as null, which reads to a model as a fact.
+ */
+const matchToAttributes = (match: SearchMatch) => {
+  const printed = match.pageLabel ?? match.page;
+
+  return [
+    `file="${escapeAttribute(match.filename)}"`,
+    match.title && `title="${escapeAttribute(match.title)}"`,
+    printed !== null && `page="${escapeAttribute(String(printed))}"`,
+    match.heading && `heading="${escapeAttribute(match.heading)}"`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+};
+
 const createPrompt = (question: string, searchResults: SearchMatch[]) => {
   return `
     You are about to be given a set of documents, matching user's request.
     Your task is to answer user's question using only the information in the documents.
     If there are no documents - say that there's no information available.
 
+    Cite the source of every fact you use: the document's title (or its filename when it
+    has no title) and the page it appears on, taken from that document's attributes.
+
     Here is the user's question:
     <question>
       ${question}
     </question>
-    
+
     Here are the document parts in the matching order:
     <documents>
       ${searchResults
         .map((match) => {
-          return `<document>${match.content}</document>`;
+          return `<document ${matchToAttributes(match)}>${match.content}</document>`;
         })
         .join("\n\n")}
     </documents>
@@ -67,8 +93,12 @@ export async function POST(req: Request) {
   if (message.parts[0].type === "text") {
     const messageText = message.parts[0].text;
     const searchResults = await semanticSearch(messageText, userId, {
-      limit: 7,
+      // A count alone is not a budget: one of these could be a whole table, and a
+      // glossary entry is a fortieth of one. maxTokens is the real control; limit is
+      // only the cap on how far down the ranking it is worth looking.
+      limit: 20,
       maxDistance: 0.8,
+      maxTokens: 4000,
     });
 
     console.log("Chat handler", { searchResults });

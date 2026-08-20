@@ -23,15 +23,91 @@ model Chat {
 }
 
 model Document {
-  id        String   @id @default(cuid())
-  userId    String
-  filename  String
+  id       String @id @default(cuid())
+  userId   String
+  filename String
+  /// The document's own title, for citation display — "Expense and Reimbursement
+  /// Policy" reads better than "03-expense-policy.pdf". Null for plain-text sources
+  /// and for PDFs whose layout offers no candidate; the filename is the fallback.
+  title    String?
+  /// sha256 of the source bytes — the same identity PageExtraction is keyed by, so the
+  /// pages a model re-read for this file are reachable from the document row.
+  ///
+  /// Unique per user, which makes re-ingesting a file mean replace rather than duplicate.
+  /// Nullable, and Postgres treats nulls as distinct, so a plain-text source with no
+  /// bytes behind it is left unconstrained — correctly, since nothing identifies it.
+  ///
+  /// Note the join it enables is time-varying. PageExtraction's key includes the model
+  /// and the prompt hash, so this finds what the cache holds *now*, never what produced
+  /// a given chunk — that is what Chunk.source is for.
+  fileHash String?
+
   status    String   @default("pending") // pending | processing | success | error
   createdAt DateTime @default(now())
 
   chunks Chunk[]
 
+  @@unique([userId, fileHash])
   @@index([userId])
+}
+
+/// A retrievable passage, and everything known about where its text came from.
+///
+/// The provenance columns below are not decoration. The PDF layer refuses to merge a
+/// paragraph across a page break because a citation needs exactly one page, keeps a
+/// printed page label only when it disagrees with the physical index, and marks text an
+/// LLM produced so it cannot pass as geometry. None of that is recoverable after the
+/// fact — the extraction cache is keyed by the *current* model and prompt — so it is
+/// frozen here at write time or it is lost.
+model Chunk {
+  id         String @id @default(cuid())
+  documentId String
+  content    String
+  index      Int    // position within the document — for ordering and dedupe
+  /// The embedding model, written from EMBEDDING_MODEL on every insert.
+  ///
+  /// No default on purpose. A default is what a column that nothing writes falls back
+  /// to, and this one recorded "text-embedding-3-small" for rows embedded by
+  /// "openai/text-embedding-3-small" — silently wrong in exactly the situation the
+  /// column exists to describe.
+  model      String
+
+  /// 1-based physical page, matching PdfPage.page and PageExtraction.page. Null for
+  /// sources that have no pages at all.
+  ///
+  /// A single number rather than a range because the chunker never merges across a page
+  /// boundary. The same rule is what keeps pageLabel and source single-valued.
+  page       Int?
+  /// The page number the document prints on itself, when it disagrees with `page` —
+  /// front matter numbered i, ii, iii, or an offprint starting at 47. Null when they
+  /// agree, so a citation renders `pageLabel ?? page`.
+  pageLabel  String?
+  /// The section heading this chunk sits under, threaded across page boundaries by the
+  /// PDF layer. Prefixed to the embedded text, deliberately not to `content`: what is
+  /// retrieved should carry its context, what is quoted should not.
+  heading    String?
+  /// Which path produced this text — "layout" | "model" | "text".
+  ///
+  /// Model extraction falls back to layout paragraphs silently and page by page, so
+  /// without this column a fully enriched document and one where every page fell back
+  /// are indistinguishable. It is also the first thing worth knowing about a bad
+  /// citation, and what makes selective re-chunking possible after a prompt change.
+  source     String?
+  /// "heading" | "paragraph" | "table". A table arrives as one block by design and must
+  /// never be split or truncated, which is a retrieval-time decision needing this flag.
+  kind       String?
+  /// Approximate, content.length / 4, for filling a prompt budget rather than a fixed
+  /// match count — chunk size here is wildly non-uniform, since a whole table is one
+  /// chunk. Too rough to police the embedding model's input limit; storeChunks does
+  /// that against the string it is actually about to send.
+  tokenCount Int?
+
+  embedding Unsupported("vector(1536)")?
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, index])
+  @@index([documentId])
 }
 
 /// One page re-read by a model because the layout defeated geometric reconstruction —
@@ -52,10 +128,10 @@ model Document {
 /// Keyed by content, not by user — two users uploading identical bytes share a row. That
 /// is correct rather than a leak: a hit already requires possessing the same file.
 model PageExtraction {
-  fileHash String // sha256 of the PDF bytes
-  page     Int // 1-based, matches PdfPage.page
-  model    String
-  prompt   String // sha256 of the prompt template, so editing it re-reads
+  fileHash   String // sha256 of the PDF bytes
+  page       Int // 1-based, matches PdfPage.page
+  model      String
+  promptHash String // sha256 of the prompt template, so editing it re-reads
   /// Why the detector flagged this page — the LayoutAssessment reasons, copied at write.
   ///
   /// Read by people rather than by code: it answers the first question asked of a bad
@@ -84,21 +160,6 @@ model PageExtraction {
   // rejection is more often a sampling accident than a property of the page. The cost of
   // that retry is bounded and rare; the cost of recording it was a status column, a claim
   // protocol, and a stale-claim rule to undo the deadlock the claim protocol introduced.
-  @@id([fileHash, page, model, prompt])
+  @@id([fileHash, page, model, promptHash])
 }
 
-model Chunk {
-  id         String @id @default(cuid())
-  documentId String
-  content    String
-  // tokenCount Int
-  index      Int    // position within the document — for ordering and dedupe
-  model      String @default("text-embedding-3-small")
-
-  embedding Unsupported("vector(1536)")?
-
-  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
-
-  @@unique([documentId, index])
-  @@index([documentId])
-}

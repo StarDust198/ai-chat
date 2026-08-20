@@ -63,6 +63,31 @@ export const extractionJsonSchema = jsonSchema;
  * two-column page and a table indistinguishably — the measurement cannot separate them
  * — so an instruction to read one column and then the other would silently destroy
  * every table it was applied to.
+ *
+ * Two rules override the model's default instinct to return one block per visual
+ * paragraph, and both exist for the same reason: what a reader retrieves is one block,
+ * so a block has to be a unit that answers something on its own. A table must not be
+ * split into rows, and a definition list must not be left glued together.
+ *
+ * The definition rule asks for a term as "heading" rather than for a new block type,
+ * because the pipeline already knows what to do with a heading: threadHeadings attaches
+ * it to the definition beneath, the chunker treats a change of heading as a boundary,
+ * and the term ends up in the Chunk.heading column, in what gets embedded, and in the
+ * citation. A new type would need all three taught to it.
+ *
+ * The separating punctuation is dropped, which is the one place this prompt asks for
+ * something other than what is printed. It is structure rather than content: the period
+ * after "Idempotency key" exists to divide the term from its definition, and it is the
+ * whole of the term that becomes a heading, a breadcrumb in the embedded text, and a
+ * citation — where "Internal Glossary > p1 > Idempotency key." reads as a mistake. The
+ * faithfulness check is indifferent, since it compares word sets and punctuation never
+ * enters them.
+ *
+ * The risk that buys is threading pollution — a heading is carried forward until the
+ * next one, so a "Note." promoted by mistake becomes the section context for everything
+ * after it. Hence the last clause. If it turns out to over-fire anyway, the answer is a
+ * distinct block type mapped to kind "paragraph" carrying a run-in marker, which the
+ * chunker can break on without threadHeadings ever seeing it.
  */
 const PROMPT_TEMPLATE = `Transcribe the text of {pages} of the attached PDF.
 
@@ -71,6 +96,12 @@ whether that is one column, several columns, a table, or a mixture of them.
 
 - Return one block per paragraph, in reading order.
 - A heading is type "heading". Ordinary prose is type "paragraph".
+- A term set off from its own definition — a short bolded phrase followed by the text
+  that defines it, as in a glossary — is TWO blocks: the term as type "heading", then
+  its definition as type "paragraph". Give the term without the punctuation that
+  separates it from its definition, and do not repeat the term inside the definition.
+  This is only for a genuine term-and-definition pair, never for a sentence that merely
+  opens with emphasis.
 - A table is a SINGLE block of type "table" containing the whole table as Markdown,
   header row included. Never one block per row: a table split across blocks is useless
   to a reader who retrieves only one of the pieces.

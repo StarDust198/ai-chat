@@ -85,9 +85,18 @@ async function readGroups(
 
   for (const group of pagesToGroups(missing.map((page) => page.page)))
     try {
-      const message = await client().messages.create(
-        pagesToRequestParams(bytes, group),
-      );
+      // Streamed, and not optional. The SDK refuses a non-streaming request whose
+      // max_tokens implies it could run past ten minutes — the cutoff works out at
+      // 21,333 tokens, and MAX_OUTPUT_TOKENS is 96,000 to hold the 50-page worst case.
+      // It throws before sending, so the failure costs nothing but looks exactly like a
+      // network error, and every page quietly keeps its layout paragraphs.
+      //
+      // finalMessage() reassembles the stream into the same Message the rest of this
+      // path already expects, so nothing downstream has to know. The batch transport is
+      // unaffected: a batch is submitted and collected later, never held open.
+      const message = await client()
+        .messages.stream(pagesToRequestParams(bytes, group))
+        .finalMessage();
 
       const text = messageToText(message);
       const blocks = text === null ? null : parseBlocks(text);

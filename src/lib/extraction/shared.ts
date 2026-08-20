@@ -51,6 +51,10 @@ export const MAX_DOCUMENT_PAGES = 50;
  * The old 16,000 would have truncated at about a dozen pages — and a truncated response
  * fails JSON.parse, which reads as a model failure rather than the configuration limit
  * it actually is.
+ *
+ * Above 21,333 the SDK refuses a non-streaming request outright, on the grounds that it
+ * could run past ten minutes. That is why sync.ts streams; raising this number without
+ * doing so turns every live page read into a silent fallback to layout paragraphs.
  */
 const MAX_OUTPUT_TOKENS = 96_000;
 
@@ -304,7 +308,7 @@ export async function readRows(fileHash: string, pages: number[]) {
       where: {
         fileHash,
         model: EXTRACTION_MODEL,
-        prompt: PROMPT_HASH,
+        promptHash: PROMPT_HASH,
         page: { in: pages },
       },
     });
@@ -335,7 +339,7 @@ export async function storeBlocks(
         fileHash,
         page: page.page,
         model: EXTRACTION_MODEL,
-        prompt: PROMPT_HASH,
+        promptHash: PROMPT_HASH,
         reasons: [...page.layout.reasons],
         blocks,
       },
