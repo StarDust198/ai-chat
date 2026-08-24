@@ -3,23 +3,13 @@ import { z } from "zod";
 import type { PdfParagraph } from "@/lib/pdf/document";
 
 /**
- * The contract with the model: what it is asked for, and what it is allowed to return.
+ * The contract with the model. One Zod schema becomes both the JSON Schema sent with the
+ * request and the parser applied to the response, so the two cannot drift apart.
  *
- * Defined once. The same Zod schema becomes the JSON Schema sent with the request and
- * the parser applied to the response, so the two cannot drift apart.
- *
- * Blocks are the wire and storage format; PdfParagraph is the runtime type. They are
- * kept separate because what is stored is the model's raw answer — an audit record —
- * while a paragraph carries fields the model never sees, such as its threaded heading.
+ * Blocks are the wire and storage format; PdfParagraph is the runtime type, carrying
+ * fields the model never sees such as its threaded heading.
  */
 
-/**
- * A single unit of text on the page.
- *
- * The type values match PdfParagraph["kind"] today, which is convenient but not
- * load-bearing: blocksToParagraphs maps between them explicitly, so the day the wire
- * format grows a type the runtime has no kind for, that map fails to compile.
- */
 const blockSchema = z.object({
   type: z.enum(["heading", "paragraph", "table"]),
   text: z.string(),
@@ -29,10 +19,9 @@ export const blocksSchema = z.array(blockSchema);
 
 const pageSchema = z.object({
   /**
-   * Plain number rather than z.number().int(): the integer variant emits minimum and
-   * maximum bounds into the JSON Schema, and structured outputs rejects numerical
-   * constraints. Nothing is lost — a page number is only ever trusted after it has been
-   * checked against the exact set of pages that were requested.
+   * Plain number rather than z.number().int(): the integer variant emits bounds into the
+   * JSON Schema, which structured outputs rejects. Nothing is lost — a page number is only
+   * trusted after it is checked against the exact set requested.
    */
   page: z.number(),
   blocks: blocksSchema,
@@ -44,12 +33,9 @@ export type ExtractionBlock = z.infer<typeof blockSchema>;
 export type ExtractionPage = z.infer<typeof pageSchema>;
 
 /**
- * The schema as the API wants it.
- *
- * $schema is stripped: Zod emits the dialect declaration, the API expects a bare schema
- * object, and an unrecognised top-level key is not worth discovering as a 400 on the
- * first real batch. Note that z.object already emits additionalProperties: false, which
- * structured outputs requires — z.strictObject would be redundant here.
+ * The schema as the API wants it: $schema stripped, since Zod emits the dialect
+ * declaration and the API expects a bare object. z.object already emits
+ * additionalProperties: false, which structured outputs requires.
  */
 const jsonSchema: Record<string, unknown> = z.toJSONSchema(extractionSchema);
 delete jsonSchema.$schema;
@@ -59,35 +45,16 @@ export const extractionJsonSchema = jsonSchema;
 /**
  * What the model is told to do.
  *
- * Says nothing about columns. The detector's "vertical-split" reason covers a
- * two-column page and a table indistinguishably — the measurement cannot separate them
- * — so an instruction to read one column and then the other would silently destroy
- * every table it was applied to.
+ * Says nothing about columns on purpose: "vertical-split" covers a two-column page and a
+ * table indistinguishably, so an instruction to read one column then the other would
+ * destroy every table it was applied to.
  *
- * Two rules override the model's default instinct to return one block per visual
- * paragraph, and both exist for the same reason: what a reader retrieves is one block,
- * so a block has to be a unit that answers something on its own. A table must not be
- * split into rows, and a definition list must not be left glued together.
- *
- * The definition rule asks for a term as "heading" rather than for a new block type,
- * because the pipeline already knows what to do with a heading: threadHeadings attaches
- * it to the definition beneath, the chunker treats a change of heading as a boundary,
- * and the term ends up in the Chunk.heading column, in what gets embedded, and in the
- * citation. A new type would need all three taught to it.
- *
- * The separating punctuation is dropped, which is the one place this prompt asks for
- * something other than what is printed. It is structure rather than content: the period
- * after "Idempotency key" exists to divide the term from its definition, and it is the
- * whole of the term that becomes a heading, a breadcrumb in the embedded text, and a
- * citation — where "Internal Glossary > p1 > Idempotency key." reads as a mistake. The
- * faithfulness check is indifferent, since it compares word sets and punctuation never
- * enters them.
- *
- * The risk that buys is threading pollution — a heading is carried forward until the
- * next one, so a "Note." promoted by mistake becomes the section context for everything
- * after it. Hence the last clause. If it turns out to over-fire anyway, the answer is a
- * distinct block type mapped to kind "paragraph" carrying a run-in marker, which the
- * chunker can break on without threadHeadings ever seeing it.
+ * The table and definition rules both override the instinct to return one block per visual
+ * paragraph: a reader retrieves one block, so a block has to answer something on its own. A
+ * term is asked for as "heading" rather than a new type because the pipeline already
+ * threads a heading into Chunk.heading, the embedded text and the citation — hence also
+ * dropping its trailing punctuation. The last clause bounds the risk: a heading threads
+ * forward, so a "Note." promoted by mistake becomes the context for everything after it.
  */
 const PROMPT_TEMPLATE = `Transcribe the text of {pages} of the attached PDF.
 
@@ -112,13 +79,9 @@ whether that is one column, several columns, a table, or a mixture of them.
 - Label each page with the page number it was asked for.`;
 
 /**
- * Identifies the instructions a cached row was produced under.
- *
- * Hashed rather than hand-versioned: a promptVersion string that has to be remembered
- * and bumped is a stale-cache bug waiting to happen, whereas a hash of the text cannot
- * be forgotten. Hashed before interpolation, so asking for pages 3 and 7 and asking for
- * page 5 are the same prompt — otherwise every combination of pages would be its own
- * cache key and the cache would almost never hit.
+ * Identifies the instructions a cached row was produced under, so editing the prompt
+ * re-reads instead of serving stale rows. Hashed before interpolation, or every
+ * combination of page numbers would be its own cache key.
  */
 export const PROMPT_HASH = createHash("sha256")
   .update(PROMPT_TEMPLATE)
@@ -138,11 +101,9 @@ export const pagesToPrompt = (pages: number[]) =>
 
 /**
  * Turns a model's answer for one page into paragraphs the rest of the pipeline can use.
- *
- * heading is left null because threading runs over the whole document after every page
- * has been merged. bbox is null because coordinates are never requested: a model
- * inventing plausible ones would be worse than having none. source is set here, so a
- * model cannot claim its output came from the layout.
+ * heading is null because threading runs over the whole document afterwards; bbox because
+ * invented coordinates would be worse than none; source is set here, so a model cannot
+ * claim its output came from the layout.
  */
 export const blocksToParagraphs = (blocks: ExtractionBlock[]): PdfParagraph[] =>
   blocks

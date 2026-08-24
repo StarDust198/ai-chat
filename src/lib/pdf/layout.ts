@@ -3,13 +3,9 @@ import { internalGaps, type Line } from "./lines";
 /**
  * Why a page's text cannot be trusted to the geometric reconstruction in lines.ts.
  *
- * Named after what was measured, not what was concluded. "vertical-split" in
- * particular covers both a two-column layout and a table, which is not a hedge: on
- * mock-data the share of lines divided by the band is 34% for a genuinely
- * two-column page and 29–33% for pages whose only structure is a table. The two are
- * not separable by this measurement, and both go to the same extractor anyway — but
- * a prompt told to read one column and then the other would ruin a table, so the
- * label must not claim to know which it found.
+ * Named after what was measured, not what was concluded: "vertical-split" covers a
+ * two-column page and a table indistinguishably (both score 29–34% of lines divided by
+ * the band), and the label must not claim to know which it found.
  */
 export type LayoutReason =
   | "vertical-split"
@@ -29,13 +25,8 @@ export interface LayoutAssessment {
 /** Below this many characters a page is not carrying its own content. */
 const MIN_TEXT_CHARS = 24;
 /**
- * Characters a page may hold and still be considered no more than its picture.
- * Generous compared to MIN_TEXT_CHARS because a caption is text the page has, not
- * text the page is about: a chart under "Figure 3: Monthly delivery latency" says
- * everything in the image and nothing in the line beneath it.
- *
- * Must not exceed IMAGE_CHECK_TEXT_GATE in extract.ts, which is what bounds the
- * pages hasImages is computed for at all.
+ * Characters a page may hold and still count as no more than its picture. Must not exceed
+ * IMAGE_CHECK_TEXT_GATE in extract.ts, which bounds the pages hasImages is computed for.
  */
 const IMAGE_PAGE_MAX_CHARS = 200;
 /** Below this many lines the ratios below are noise rather than evidence. */
@@ -53,13 +44,9 @@ const SPANNING_SHARE = 0.8;
 /** Multiples of the font size at which a gap stops being punctuation of any kind. */
 const WIDE_GAP_EM = 3;
 /**
- * Share of lines with such a gap that marks the page as tabular.
- *
- * Measured against mock-data/pdf: pages without a table score exactly zero, and the
- * lowest scoring page that has one reaches 9.8% — a table occupying four rows of a
- * forty-line page. This sits in that gap, low enough to catch a small table on a
- * text-heavy page and high enough to absorb a couple of right-aligned or deeply
- * indented lines on a page that is really prose.
+ * Share of lines with such a gap that marks the page as tabular. Measured on
+ * mock-data/pdf: pages without a table score zero, the lowest-scoring page with one
+ * reaches 9.8%. This sits between them.
  */
 const WIDE_GAP_LINE_SHARE = 0.05;
 /** Resolution of the horizontal coverage scan, in points. */
@@ -73,13 +60,9 @@ const largestInternalGap = (line: Line) =>
   Math.max(0, ...internalGaps(line.items).map(({ gap }) => gap));
 
 /**
- * A line that runs the full width of the text block without a break in it.
- *
- * Both conditions are load-bearing. Width alone would also match a line whose two
- * columns have been read as one, which is the very evidence a gutter is made of —
- * such a line runs the full width but carries the gutter as an internal gap. Any gap
- * at or above the minimum gutter width could be a gutter, so a line holding one is
- * never treated as spanning.
+ * A line that runs the full width of the text block without a break in it. Both conditions
+ * are load-bearing: a line whose two columns were read as one also runs the full width,
+ * but carries the gutter as an internal gap.
  */
 const isSpanning = (line: Line, blockWidth: number) => {
   const right = Math.max(...line.items.map((item) => item.x + item.width));
@@ -91,11 +74,9 @@ const isSpanning = (line: Line, blockWidth: number) => {
 };
 
 /**
- * Widest vertical band that almost no line writes into.
- *
- * Prose leaves no such band: its word gaps land at a different x on every line, so
- * across a page every column of the text block is covered by something. A gutter
- * survives because both columns avoid the same strip on every line.
+ * Widest vertical band that almost no line writes into. Prose leaves none — its word gaps
+ * land at a different x on every line — while a gutter survives because both columns avoid
+ * the same strip.
  */
 function widestGutter(lines: Line[]): number {
   const items = lines.flatMap((line) => line.items);
@@ -107,10 +88,8 @@ function widestGutter(lines: Line[]): number {
   const bins = Math.ceil(blockWidth / BIN_WIDTH);
   if (bins <= 2) return 0;
 
-  // Full-width elements — a title, a spanning abstract — sit on top of a gutter
-  // rather than denying it, so they are not evidence against one. Counting them
-  // would let a paper's title and abstract between them erase the gutter that the
-  // rest of the page is plainly set in.
+  // Full-width elements — a title, a spanning abstract — sit on top of a gutter rather
+  // than denying it, and counting them would erase a gutter the page is plainly set in.
   const columnar = lines.filter((line) => !isSpanning(line, blockWidth));
   if (columnar.length < MIN_COLUMNAR_LINES) return 0;
 
@@ -156,13 +135,9 @@ function widestGutter(lines: Line[]): number {
 }
 
 /**
- * Whether a real share of the page is actually divided by the band.
- *
- * Measured against every line, including the spanning ones the coverage scan set
- * aside, and a line only counts if the band cuts it: content on both sides and
- * nothing reaching into the middle. Without that last condition a full-width title
- * would count as divided by any band it crosses, and a table's gap between two
- * columns of cells would read as a page-dividing gutter.
+ * Whether a real share of the page is actually divided by the band. A line counts only if
+ * the band cuts it — content on both sides, nothing reaching into the middle — or a
+ * full-width title would count as divided by any band it crosses.
  */
 function dividesContent(
   lines: Line[],
@@ -206,11 +181,9 @@ const finalise = (
 });
 
 /**
- * Decides whether a page's text can be reconstructed from its geometry.
- *
- * Expects lines with running headers and footers already removed: a footer spaces its
- * fields across the full page width, which reads as tabular and would flag every page
- * of a document that has one.
+ * Decides whether a page's text can be reconstructed from its geometry. Expects running
+ * headers and footers already removed: a footer spaces its fields across the page, which
+ * reads as tabular and would flag every page of a document that has one.
  */
 export function assessLayout(
   lines: Line[],
@@ -223,14 +196,12 @@ export function assessLayout(
 
   const characters = countCharacters(lines);
 
-  // Ahead of everything below, because a page whose content is a picture has no
-  // ratios worth measuring and too few lines to survive the small-page guard — it
-  // would otherwise be written off as ordinary prose.
+  // Ahead of everything below: a picture has no ratios worth measuring and too few lines
+  // to survive the small-page guard, so it would be written off as ordinary prose.
   if (hasImages && characters < IMAGE_PAGE_MAX_CHARS)
     return finalise([...reasons, "image-only"], 0, 0);
 
-  // Nothing to recover without a picture, and asking a model to read blank paper
-  // costs a call to be told so.
+  // Nothing to recover: asking a model to read blank paper costs a call to be told so.
   if (characters < MIN_TEXT_CHARS) return finalise(reasons, 0, 0);
 
   // Short but complete: a title page or a section divider.

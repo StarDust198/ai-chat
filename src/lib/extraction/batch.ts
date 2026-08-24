@@ -20,20 +20,12 @@ import {
 } from "./shared";
 
 /**
- * Re-reads complex pages across many documents in one batch, at half price.
+ * Re-reads complex pages across many documents in one batch, at half price — for a
+ * re-index, where nobody is waiting.
  *
- * For a re-index, where nobody is waiting and the whole corpus goes through at once.
- * Sending every document in a single batch is the point: it is the only way the 50%
- * discount applies, and it is what sync.ts cannot do because it answers one upload at a
- * time.
- *
- * Blocks until the batch ends, which on this corpus has taken anywhere from ten minutes
- * to over an hour. That is the deliberate shape: a re-index is a command you leave
- * running, not a background job. Nothing about the batch is written to the database, so
- * a run that dies leaves nothing to clean up — re-running simply resends whatever is not
- * yet collected, losing only the money already in flight. Persisting the batch id would
- * buy that money back, and cost a column, an index, and a discovery pass to save cents on
- * a corpus this size.
+ * Blocks until the batch ends, which takes ten minutes to over an hour: a command you
+ * leave running, not a background job. The batch id is never persisted, so a run that dies
+ * leaves nothing to clean up and re-running resends whatever was not collected.
  *
  * Never throws. Documents whose pages fail keep their layout paragraphs.
  */
@@ -62,10 +54,8 @@ interface Request {
 }
 
 /**
- * Works out what still needs reading, and builds a request for each group of pages.
- *
- * Pages already collected are skipped, which is what makes a re-run after a crash cheap:
- * only what never made it through is sent again.
+ * Works out what still needs reading, and builds a request for each group of pages. Pages
+ * already collected are skipped, which is what makes a re-run after a crash cheap.
  */
 async function planRequests(documents: BatchDocument[]): Promise<Request[]> {
   const requests: Request[] = [];
@@ -135,15 +125,11 @@ async function waitForBatch(
 }
 
 /**
- * Stores the pages of one request that survived validation.
+ * Stores the pages of one request that survived validation. Layers 1 and 2 fail the whole
+ * request — a response naming the wrong pages says nothing trustworthy about any of them —
+ * while layer 3 is per page. Either way a failed page keeps its layout paragraphs.
  *
- * Layers 1 and 2 fail the whole request: a response that named the wrong pages tells us
- * nothing trustworthy about any of them. Layer 3 is per page, so one unfaithful page does
- * not cost its neighbours. Nothing is written for a page that fails either way — it keeps
- * its layout paragraphs and is read again next time.
- *
- * Pages are matched back to their document by custom_id, never by position: results come
- * back in whatever order the API finished them.
+ * Matched back by custom_id, never by position: results arrive in completion order.
  */
 async function storeResult(
   request: Request,
@@ -170,9 +156,8 @@ export async function extractViaBatch(
   if (requests.length === 0) report("  nothing to send — every page is already read");
   else
     try {
-      // Rows are only written for what comes back. Claiming up front would leave a dead
-      // pending row on every page if the run were interrupted, which is exactly the
-      // bookkeeping this transport does without.
+      // Rows are written only for what comes back: claiming pages up front would leave a
+      // dead pending row on every one of them if the run were interrupted.
       const batch = await client().messages.batches.create({
         requests: requests.map((request) => ({
           custom_id: request.customId,
@@ -186,9 +171,8 @@ export async function extractViaBatch(
       );
 
       if (await waitForBatch(batch.id, report)) {
-        // Layer 3 needs the page as the layout read it, and this process still holds
-        // every parsed document — so nothing about the pages has to be stored to check
-        // them later.
+        // Layer 3 needs the page as the layout read it, and this process still holds every
+        // parsed document.
         const pagesByKey = new Map<string, PdfPage>();
 
         for (const { doc, bytes } of documents) {

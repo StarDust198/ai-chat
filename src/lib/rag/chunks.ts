@@ -5,36 +5,21 @@ import type { ChunkInput } from "./chunker";
 import { embedChunks } from "./embeddings";
 
 /**
- * Characters of embedding input that are certainly safe to send.
- *
- * text-embedding-3-small accepts 8,191 tokens. There is no tokenizer in this project, so
- * the ceiling is expressed in characters at a deliberately pessimistic ~2.5 per token
- * rather than the ~4 used for prompt budgeting: erring low costs the tail of one unusually
- * large passage, erring high costs the whole request.
- *
- * Not derived from ChunkInput.tokenCount, which describes `content` alone — the string
- * sent for embedding also carries the heading.
+ * Characters of embedding input that are certainly safe to send. text-embedding-3-small
+ * accepts 8,191 tokens; with no tokenizer here the ceiling is characters at a pessimistic
+ * ~2.5 per token, since erring low costs one passage's tail and erring high costs the
+ * whole request. Not derived from ChunkInput.tokenCount, which excludes the breadcrumb.
  */
 const MAX_EMBEDDING_CHARS = 20_000;
 
 /**
- * What actually gets embedded: where the passage sits, then the passage.
+ * What actually gets embedded: where the passage sits, then the passage. "the limit is $25"
+ * is unfindable without "Reimbursement limits" attached.
  *
- * A paragraph retrieved on its own has lost the thing that says what it is about — "the
- * limit is $25" is unfindable and unusable without "Reimbursement limits" attached. The
- * breadcrumb is prefixed here rather than stored in `content` so that what is quoted back
- * to a reader stays the passage as printed, while what is matched against a question
- * carries its context. Both remain reproducible from the row: the title lives on
- * Document, the heading on Chunk.
- *
- * The title is included because nothing else puts it in the vector space. deriveTitle
- * finds it, threadHeadings refuses to promote it — correctly, it names the document
- * rather than a section — and the chunker drops heading segments, so a question naming
- * the document had nothing to match against.
- *
- * It shifts every chunk of a document by the same amount, so it changes how this document
- * ranks against others rather than how its own chunks rank against each other. Worth it
- * for a title that means something; closer to noise for a generic one.
+ * Prefixed here rather than stored in `content`, so what is quoted back to a reader stays
+ * the passage as printed while what is matched carries its context. The title is included
+ * because nothing else puts it in the vector space; it shifts every chunk of a document
+ * equally, changing how the document ranks against others rather than internally.
  */
 const chunkToEmbeddingInput = (
   { heading, content }: ChunkInput,
@@ -54,13 +39,9 @@ const chunkToEmbeddingInput = (
 };
 
 /**
- * Embeds the chunks of one document and writes them.
- *
- * One statement, with the embeddings in it. The previous shape wrote rows first and filled
- * their embeddings in a second transaction, which left a window: a process that died
- * between the two left rows with a null embedding, permanently invisible to search because
- * of the `embedding IS NOT NULL` filter and therefore silent. unnest closes it and drops
- * the per-row round trips at the same time.
+ * Embeds the chunks of one document and writes them in a single statement, embeddings
+ * included — filling them in afterwards would let a crash strand rows with a null
+ * embedding, permanently invisible to search and therefore silent.
  *
  * Raw SQL because embedding is Unsupported() and cannot appear in a Prisma create. Ids are
  * generated here rather than by @default(cuid()), which a raw insert bypasses.

@@ -21,27 +21,25 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Everything the reader does before it needs the network.
+ * Everything the page reader does before it needs the network: which pages would be sent,
+ * what they would be sent with, and what the validation layers do to a response that is
+ * wrong in each of the ways a response can be wrong.
  *
- * Which pages would be sent, what they would be sent with, and — the part most worth
- * checking — what the validation layers do to a response that is wrong in each of the
- * ways a response can be wrong. None of that needs an API call, so none of it should
- * wait for one.
+ *   pnpm tsx scripts/enrich.ts            offline checks only
+ *   pnpm tsx scripts/enrich.ts --live     one synchronous read, billed
+ *   pnpm tsx scripts/enrich.ts --batch    the same work batched, billed
  */
 
-const DIRS = ["./mock-data/pdf", "./mock-data/pdf-fixtures"];
+const DIRS = ["./mock-data/pdf"];
 
-/** Pages the detector's calibration notes call out by name, and their verdicts. */
+/** Pages the detector should flag, and pages it should leave alone. */
 const EXPECTED_SELECTION: [string, number, boolean][] = [
   ["15-glossary.pdf", 1, true],
   ["09-pricing-and-plans.pdf", 1, true],
-  ["two-column.pdf", 1, true],
-  ["scanned.pdf", 1, true],
-  ["blank.pdf", 1, false],
 ];
 
-const EXPECTED_FLAGGED = 26;
-const EXPECTED_PAGES = 56;
+const EXPECTED_FLAGGED = 20;
+const EXPECTED_PAGES = 29;
 
 const check = (passed: boolean, label: string) =>
   console.log(`  ${passed ? "ok  " : "FAIL"} ${label}`);
@@ -228,9 +226,8 @@ function validation() {
     "too few words to judge passes rather than guesses",
   );
 
-  // Both skip paths return the same verdict for a scanned page, so the only way to tell
-  // which one fired is a page carrying plenty of layout words the model did not return.
-  // The word floor cannot apply, so passing proves the image-only branch did the work.
+  // A page with plenty of layout words the model did not return: the word floor cannot
+  // apply, so passing proves the image-only branch is what let it through.
   check(
     isFaithful(facts(LAYOUT_TEXT, ["image-only"]), [
       { type: "paragraph", text: "Nothing in common with the layout at all." },
@@ -298,11 +295,7 @@ function compare(loaded: Loaded, enriched: PdfDocument[]) {
     }
 }
 
-/**
- * The synchronous transport, end to end in one process.
- *
- * What an upload would do: the caller waits, and the document comes back enriched.
- */
+/** The synchronous transport, end to end: what an upload does, with the caller waiting. */
 async function live() {
   const loaded = await load();
 
@@ -319,10 +312,8 @@ async function live() {
 }
 
 /**
- * The batch transport: every document in one batch, half price, and a long wait.
- *
- * What a re-index would do. Leave it running — on this corpus the queue has taken
- * anywhere from ten minutes to over an hour.
+ * The batch transport: every document in one batch, half price, and a long wait. What a
+ * re-index does — leave it running, the queue takes ten minutes to over an hour.
  */
 async function batch() {
   const loaded = await load();

@@ -16,15 +16,14 @@ import { MyUIMessage } from "@/types/chat";
 import { auth } from "@clerk/nextjs/server";
 
 const schema = z.object({
-  // Message is validated below
+  // Unchecked here: validateMessages runs it through the AI SDK's own validator below.
   message: z.custom<MyUIMessage>(),
-  // messages: z.array(z.custom<MyUIMessage>()),
   modelId: z.string(),
   chatId: z.string(),
   /**
-   * Which retrieval tools this message may use. Absent means both, so a client that
-   * knows nothing about sources — which is every client until the toggles are built —
-   * gets the full set.
+   * Which retrieval tools this message may use. Absent means both, so a client that knows
+   * nothing about sources — which is every client until the toggles are built — gets the
+   * full set.
    */
   sources: z
     .object({ documents: z.boolean(), web: z.boolean() })
@@ -99,9 +98,7 @@ export async function POST(req: Request) {
     };
   }
 
-  // The whole map is always declared and `activeTools` does the narrowing. Which sources
-  // are on is a property of this request; the conversation it replays is permanent, so a
-  // history holding a web_search call has to stay valid on a turn where web is off.
+  // Narrows the tool map rather than rebuilding it — see buildTools in lib/tools.
   const activeTools = [
     "calc",
     "weather",

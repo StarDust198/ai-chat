@@ -1,13 +1,9 @@
 import type { SegmentSource, SourceSegment } from "./sources";
 
 /**
- * Groups source segments into the passages that get embedded and retrieved.
- *
- * Segments are structural units, which is not the same thing as a good retrieval unit: a
- * single paragraph is usually too small to answer anything on its own, and
- * linesToParagraphs also breaks on a font-size change, so a caption or a bolded lead-in
- * arrives as its own fragment. Merging fixes that — but only within the boundaries the
- * upstream layers were careful to establish.
+ * Groups source segments into the passages that get embedded and retrieved. A structural
+ * unit is not a good retrieval unit: one paragraph is usually too small to answer
+ * anything, and a caption or bolded lead-in arrives as its own fragment.
  */
 
 /** One row of Chunk, minus the embedding. */
@@ -23,11 +19,8 @@ export interface ChunkInput {
 }
 
 /**
- * Deliberately an approximation: characters over four, no tokenizer.
- *
- * Good enough to fill a prompt budget, where being 20% out costs a little context, and
- * not good enough to police a hard input limit, where being 20% out is a failed request.
- * storeChunks measures the real limit against the real string instead.
+ * An approximation — characters over four, no tokenizer. Good enough to fill a prompt
+ * budget, not to police a hard input limit; storeChunks measures that itself.
  */
 export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
@@ -39,13 +32,10 @@ const MAX_TOKENS = 1500;
 const MAX_CHARS = MAX_TOKENS * 4;
 
 /**
- * Whether two segments may end up in the same chunk.
- *
- * Every clause here protects a column on the row. A chunk that spanned two pages could
- * not be cited to either, one that spanned a heading would misattribute its context, and
- * one that mixed layout and model text could not answer which produced it. Enforcing all
- * three in one place is what lets page, pageLabel and source stay single values rather
- * than ranges and arrays.
+ * Whether two segments may end up in the same chunk. Every clause protects a column: a
+ * chunk spanning two pages could be cited to neither, one spanning a heading would
+ * misattribute its context, one mixing layout and model text could not say which produced
+ * it. Enforcing them here is what keeps page, pageLabel and source single values.
  */
 const isMergeable = (left: SourceSegment, right: SourceSegment) =>
   left.page === right.page &&
@@ -55,12 +45,9 @@ const isMergeable = (left: SourceSegment, right: SourceSegment) =>
   right.kind !== "table";
 
 /**
- * Breaks a passage too long to embed into pieces, preferring sentence boundaries.
- *
- * Only ever reached by a single oversized segment — merging stops well before this — so
- * in practice this is a runaway paragraph or a page of prose the layout read as one
- * block. Word boundaries are the last resort, and a word longer than the budget is cut,
- * because returning a piece that still cannot be embedded would defeat the point.
+ * Breaks a passage too long to embed into pieces, preferring sentence boundaries. Only
+ * reached by a single oversized segment, since merging stops well before this. A word
+ * longer than the budget is cut — a piece that still cannot be embedded is no use.
  */
 function splitOversized(text: string): string[] {
   if (text.length <= MAX_CHARS) return [text];
@@ -100,14 +87,10 @@ function splitOversized(text: string): string[] {
 /**
  * Turns segments into chunks, in document order.
  *
- * Heading segments contribute no chunk of their own. threadHeadings has already copied
- * each heading's text into the `heading` field of every paragraph beneath it, so the text
- * survives in the column and in what gets embedded. The one thing this loses is a heading
- * with no body under it at all, which is a section title with nothing to retrieve.
- *
- * A table is never merged and never split. The extraction prompt demands a whole table in
- * one block because a reader who retrieves one piece of a split table has been given
- * nothing useful, and re-splitting it here would undo that at the last step.
+ * Heading segments contribute no chunk of their own — threadHeadings has already copied
+ * each into the `heading` field of every paragraph beneath it — so the only thing lost is
+ * a heading with no body, which has nothing to retrieve. A table is never merged and never
+ * split: one piece of a split table is no use to whoever retrieves it.
  */
 export function segmentsToChunks(segments: SourceSegment[]): ChunkInput[] {
   const chunks: ChunkInput[] = [];

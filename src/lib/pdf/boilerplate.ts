@@ -20,9 +20,9 @@ const inMargin = (line: Line, pageHeight: number) =>
   line.y > pageHeight * 0.9 || line.y < pageHeight * 0.1;
 
 /**
- * Boilerplate repeats at a stable position. Repeated text alone is not enough:
- * "Table 1." and "Table 2." normalise to the same key, so two captions that happen
- * to fall in a margin band are otherwise indistinguishable from a running header.
+ * Boilerplate repeats at a stable position. Repeated text alone is not enough: "Table 1."
+ * and "Table 2." normalise to the same key, so two captions that happen to fall in a
+ * margin band are otherwise indistinguishable from a running header.
  */
 const positionStable = (positions: number[]) =>
   Math.max(...positions) - Math.min(...positions) <= POSITION_TOLERANCE;
@@ -31,9 +31,9 @@ const positionStable = (positions: number[]) =>
  * Removes running headers and footers, identified by repeating in a margin band at a
  * consistent height across pages.
  *
- * Removed lines are returned whole, not as the keys that matched them: a caller
- * wanting the printed page number or the document's running title needs the original
- * text, and normalising has replaced every digit with a placeholder.
+ * Removed lines are returned whole rather than as the keys that matched them: a caller
+ * wanting the printed page number or the running title needs the original text, and
+ * normalising has replaced every digit with a placeholder.
  */
 export function stripBoilerplate(
   pages: Line[][],

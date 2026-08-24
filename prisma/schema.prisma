@@ -26,20 +26,18 @@ model Document {
   id       String @id @default(cuid())
   userId   String
   filename String
-  /// The document's own title, for citation display — "Expense and Reimbursement
-  /// Policy" reads better than "03-expense-policy.pdf". Null for plain-text sources
-  /// and for PDFs whose layout offers no candidate; the filename is the fallback.
+  /// The document's own title, for citation display. Null for plain-text sources and for
+  /// PDFs whose layout offers no candidate; the filename is the fallback.
   title    String?
   /// sha256 of the source bytes — the same identity PageExtraction is keyed by, so the
   /// pages a model re-read for this file are reachable from the document row.
   ///
-  /// Unique per user, which makes re-ingesting a file mean replace rather than duplicate.
-  /// Nullable, and Postgres treats nulls as distinct, so a plain-text source with no
-  /// bytes behind it is left unconstrained — correctly, since nothing identifies it.
+  /// Unique per user, so re-ingesting a file replaces rather than duplicates. Nullable,
+  /// and Postgres treats nulls as distinct, leaving plain-text sources unconstrained.
   ///
-  /// Note the join it enables is time-varying. PageExtraction's key includes the model
-  /// and the prompt hash, so this finds what the cache holds *now*, never what produced
-  /// a given chunk — that is what Chunk.source is for.
+  /// The join it enables is time-varying: PageExtraction's key includes the model and the
+  /// prompt hash, so it finds what the cache holds *now*, never what produced a given
+  /// chunk — that is Chunk.source.
   fileHash String?
 
   status    String   @default("pending") // pending | processing | success | error
@@ -53,53 +51,42 @@ model Document {
 
 /// A retrievable passage, and everything known about where its text came from.
 ///
-/// The provenance columns below are not decoration. The PDF layer refuses to merge a
-/// paragraph across a page break because a citation needs exactly one page, keeps a
-/// printed page label only when it disagrees with the physical index, and marks text an
-/// LLM produced so it cannot pass as geometry. None of that is recoverable after the
-/// fact — the extraction cache is keyed by the *current* model and prompt — so it is
-/// frozen here at write time or it is lost.
+/// The provenance columns are frozen at write time because none of them is recoverable
+/// afterwards: the extraction cache is keyed by the *current* model and prompt, so it
+/// cannot say what produced a chunk written last month.
 model Chunk {
   id         String @id @default(cuid())
   documentId String
   content    String
   index      Int    // position within the document — for ordering and dedupe
-  /// The embedding model, written from EMBEDDING_MODEL on every insert.
-  ///
-  /// No default on purpose. A default is what a column that nothing writes falls back
-  /// to, and this one recorded "text-embedding-3-small" for rows embedded by
-  /// "openai/text-embedding-3-small" — silently wrong in exactly the situation the
-  /// column exists to describe.
+  /// The embedding model, written from EMBEDDING_MODEL on every insert. No default: a
+  /// default is what a column nothing writes falls back to, which would be silently wrong
+  /// in exactly the situation this column exists to describe.
   model      String
 
   /// 1-based physical page, matching PdfPage.page and PageExtraction.page. Null for
-  /// sources that have no pages at all.
-  ///
-  /// A single number rather than a range because the chunker never merges across a page
-  /// boundary. The same rule is what keeps pageLabel and source single-valued.
+  /// sources that have no pages. A single number rather than a range because the chunker
+  /// never merges across a page boundary — the same rule keeps pageLabel and source
+  /// single-valued.
   page       Int?
-  /// The page number the document prints on itself, when it disagrees with `page` —
-  /// front matter numbered i, ii, iii, or an offprint starting at 47. Null when they
-  /// agree, so a citation renders `pageLabel ?? page`.
+  /// The page number the document prints on itself, when it disagrees with `page` — front
+  /// matter numbered i, ii, iii, or an offprint starting at 47. Null when they agree, so a
+  /// citation renders `pageLabel ?? page`.
   pageLabel  String?
-  /// The section heading this chunk sits under, threaded across page boundaries by the
-  /// PDF layer. Prefixed to the embedded text, deliberately not to `content`: what is
-  /// retrieved should carry its context, what is quoted should not.
+  /// The section heading this chunk sits under. Prefixed to the embedded text but
+  /// deliberately not to `content`: what is retrieved should carry its context, what is
+  /// quoted should not.
   heading    String?
-  /// Which path produced this text — "layout" | "model" | "text".
-  ///
-  /// Model extraction falls back to layout paragraphs silently and page by page, so
-  /// without this column a fully enriched document and one where every page fell back
-  /// are indistinguishable. It is also the first thing worth knowing about a bad
-  /// citation, and what makes selective re-chunking possible after a prompt change.
+  /// Which path produced this text — "layout" | "model" | "text". Model extraction falls
+  /// back page by page and silently, so without this a fully enriched document and one
+  /// where every page fell back are indistinguishable.
   source     String?
-  /// "heading" | "paragraph" | "table". A table arrives as one block by design and must
-  /// never be split or truncated, which is a retrieval-time decision needing this flag.
+  /// "heading" | "paragraph" | "table". A table arrives as one block and must never be
+  /// split or truncated, which is a retrieval-time decision needing this flag.
   kind       String?
   /// Approximate, content.length / 4, for filling a prompt budget rather than a fixed
-  /// match count — chunk size here is wildly non-uniform, since a whole table is one
-  /// chunk. Too rough to police the embedding model's input limit; storeChunks does
-  /// that against the string it is actually about to send.
+  /// match count — chunk size is wildly non-uniform, since a whole table is one chunk. Too
+  /// rough to police the embedding input limit; storeChunks measures that itself.
   tokenCount Int?
 
   embedding Unsupported("vector(1536)")?
@@ -110,56 +97,39 @@ model Chunk {
   @@index([documentId])
 }
 
-/// One page re-read by a model because the layout defeated geometric reconstruction —
-/// both the job and its result.
+/// One page re-read by a model because the layout defeated geometric reconstruction.
 ///
-/// The row is written before the batch is created, so extraction survives a stopped
-/// server: the batch id lives here rather than in a variable, and any later process can
-/// finish work an earlier one started.
+/// A cache and an audit trail, never a job queue: a row is written only once a page has
+/// come back well formed and about the right page. Nothing records a read in progress or
+/// a failed one, so an interrupted read leaves no trace to clean up and a rejected page is
+/// simply read again on the next ingest. Deleting a collected row silently re-pays for it.
 ///
-/// It is a job while in flight and a permanent record once collected — deliberately not
-/// named PageExtractionJob, because a table named for work invites a cleanup that deletes
-/// finished rows. A collected row is the cache and the audit trail: purging it silently
-/// re-pays for every page. Only pending, failed, and expired rows are ever disposable.
+/// Per page rather than per document, so raising a detector threshold only pays for the
+/// one page it newly flags.
 ///
-/// Per page rather than per document: raising a detector threshold makes one more page
-/// complex, and only that page should have to be paid for again.
-///
-/// Keyed by content, not by user — two users uploading identical bytes share a row. That
-/// is correct rather than a leak: a hit already requires possessing the same file.
+/// Keyed by content, not by user — two users uploading identical bytes share a row, which
+/// is not a leak: a hit already requires possessing the same file.
 model PageExtraction {
   fileHash   String // sha256 of the PDF bytes
   page       Int // 1-based, matches PdfPage.page
   model      String
   promptHash String // sha256 of the prompt template, so editing it re-reads
   /// Why the detector flagged this page — the LayoutAssessment reasons, copied at write.
-  ///
-  /// Read by people rather than by code: it answers the first question asked of a bad
-  /// citation, which is why this page was sent to a model at all, and keeps "which
-  /// reasons fail most often" answerable. A column rather than JSON so that stays a query.
+  /// Read by people rather than by code: it answers why a badly cited page was sent to a
+  /// model at all. A column rather than JSON so that stays a query.
   reasons String[]
 
-  /// The model's raw blocks, exactly as returned. Raw rather than mapped paragraphs:
-  /// model output is the least trustworthy thing in the pipeline and the only part that
-  /// cannot be reproduced by re-running code, so when a citation looks wrong this column
-  /// says whether the model or the chunker was at fault.
+  /// The model's raw blocks, exactly as returned rather than as mapped paragraphs — this
+  /// is the only part of the pipeline that cannot be reproduced by re-running code, so
+  /// when a citation looks wrong it says whether the model or the chunker was at fault.
   ///
-  /// Not nullable, which is the point of the whole table: a row exists only for a page
-  /// that came back well formed and about the right page. There is no status to filter on
-  /// and no null to serve by forgetting to. Faithfulness is still checked on read against
-  /// the page as parsed — a stored row is trusted for cost, not for correctness.
+  /// Faithfulness is re-checked on read against the page as parsed: a stored row is
+  /// trusted for cost, not for correctness.
   blocks Json
 
   createdAt DateTime @default(now())
 
-  // The content identity is the identity, and rows are written once and never changed.
-  //
-  // Nothing records a page that is being read or one that failed. An interrupted read
-  // leaves no trace to clean up, and a page that failed validation is simply read again
-  // the next time the document is ingested — which is what should happen, since a
-  // rejection is more often a sampling accident than a property of the page. The cost of
-  // that retry is bounded and rare; the cost of recording it was a status column, a claim
-  // protocol, and a stale-claim rule to undo the deadlock the claim protocol introduced.
+  // The content is the identity, and rows are written once and never changed.
   @@id([fileHash, page, model, promptHash])
 }
 

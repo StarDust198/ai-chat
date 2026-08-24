@@ -18,20 +18,16 @@ import { PrismaClient } from "@prisma/client";
  *   pnpm tsx scripts/ingest.ts --only a,b     only files whose name contains a or b
  *   pnpm tsx scripts/ingest.ts --delay 0      no wait between documents (default 30s)
  *
- * --only exists because a live ingest of a complex page costs money: it is how you try
- * two documents before committing the corpus to a model re-read.
+ * A live ingest of a complex page costs money, so --only is how you try two documents
+ * before committing the whole corpus to a model re-read.
  *
- * --delay is for the embedding provider's free tier, and defaults to spacing documents
- * well apart because that tier rejects a burst outright: a run at 2s spacing got five
- * documents in and was then refused through 62 seconds of the SDK's own backoff. The
- * limit does replenish — a later run finished the remaining ten — so spacing is the lever
- * that works, not retrying. One request covers one document, so this delays a dozen calls
- * rather than hundreds. Pass --delay 0 on paid credits, where none of this applies.
+ * --delay spaces out embedding requests, which the provider's free tier rejects in a
+ * burst; retrying does not help, since the limit replenishes over minutes. One request
+ * covers one document. Pass --delay 0 on paid credits.
  *
  * mock-data/txt holds the same fifteen documents as mock-data/pdf, so --all stores the
- * corpus twice and retrieval returns near-duplicate passages from two documents. Useful
- * for exercising the text path, misleading for judging retrieval quality — hence PDFs by
- * default.
+ * corpus twice and retrieval returns near-duplicate passages. Useful for exercising the
+ * text path, misleading for judging retrieval quality — hence PDFs by default.
  */
 
 const TEXT_DIR = "./mock-data/txt";
@@ -56,29 +52,20 @@ const only = (args[args.indexOf("--only") + 1] ?? "")
 const wanted = (filename: string) =>
   only.length === 0 || only.some((part) => filename.includes(part));
 
-/**
- * Milliseconds between documents. 0 — the default — is back to back.
- *
- * The flag's presence is checked before its value, unlike --only above: indexOf returns
- * -1 when absent, and args[0] is a perfectly good number if the script is ever called
- * with a bare one.
- */
-/** Spacing between documents when --delay is not passed. */
+/** Milliseconds between documents when --delay is not passed. */
 const DEFAULT_DELAY_MS = 30_000;
 
-// A malformed value falls back to the default rather than to 0: the default exists to
-// keep a run under the free tier's limit, and silently disabling it is the one outcome
-// worth ruling out. `--delay 0` is still an explicit, valid way to turn it off.
+// A malformed value falls back to the default rather than to 0, since silently removing
+// the spacing is the one outcome worth ruling out. `--delay 0` still turns it off.
 const delayIndex = args.indexOf("--delay");
 const delayArg = delayIndex === -1 ? NaN : Number(args[delayIndex + 1]);
 const delayMs =
   Number.isFinite(delayArg) && delayArg >= 0 ? delayArg : DEFAULT_DELAY_MS;
 
 /**
- * How much of the document a model read.
- *
- * Worth printing because the fallback is silent: a document whose complex pages all failed
- * extraction ingests exactly as cleanly as one where every page came back.
+ * How much of the document a model read. Worth printing because the fallback is silent: a
+ * document whose complex pages all failed extraction ingests exactly as cleanly as one
+ * where every page came back.
  */
 const summarise = ({ segments }: DocumentSource) => {
   const model = segments.filter((segment) => segment.source === "model").length;
@@ -90,8 +77,8 @@ async function ingest(source: DocumentSource) {
   await ingestDocument(USER_ID, source);
   console.log(`  ingested ${source.filename.padEnd(32)} ${summarise(source)}`);
 
-  // The prompt is a review gate, not a rate limit, so --delay is only consulted when
-  // there is nothing already stopping between documents.
+  // The prompt is a review gate, not a rate limit, so --delay only applies when nothing
+  // is already stopping between documents.
   if (pauses) await rl.question("  press enter to continue... ");
   else if (delayMs) await sleep(delayMs);
 }

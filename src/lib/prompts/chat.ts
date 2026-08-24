@@ -21,23 +21,16 @@ const DESCRIPTIONS: Record<keyof Sources, string> = {
 };
 
 /**
- * The instructions for one message, given what it is allowed to use.
+ * The instructions for one message, given what it is allowed to use. Rebuilt per request
+ * and never stored, so nothing here reaches the transcript.
  *
- * Rebuilt per request and never stored, which is the point: the previous design wrote the
- * retrieval prompt into the user's own message, so it was saved, re-rendered as something
- * the user had said, and re-applied to every later turn. Nothing here reaches the
- * transcript.
+ * Switched-off tools are named rather than omitted. Sources are per-message but history is
+ * permanent, so a chat can hold web_search results from before web was switched off; with
+ * no account of them the model reads its own past results, offers to search again, and
+ * then either stalls or invents the answer.
  *
- * Both blocks are named on purpose. Sources are per-message but history is permanent, so a
- * chat can hold web_search results from before web was switched off. Omitting the tool
- * entirely leaves the model reading its own past search results with no account of them:
- * the usual outcome is that it offers to search again and then either stalls or invents
- * the result. Saying which tools are off, and that their earlier results still stand, is
- * what prevents both.
- *
- * Deliberately not "answer only from the documents". That instruction is what made the
- * old prompt fight web search, and made "what's 2+2" answer that no information was
- * available.
+ * Deliberately not "answer only from the documents" — that instruction fights web search
+ * and makes "what's 2+2" report that no information is available.
  */
 export const buildSystemPrompt = (sources: Sources) => {
   const off = SOURCE_KEYS.filter((key) => !sources[key]);

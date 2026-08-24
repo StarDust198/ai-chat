@@ -19,13 +19,9 @@ import {
 } from "./shared";
 
 /**
- * Re-reads complex pages while the caller waits.
- *
- * The transport for an upload someone is watching. Measured at 23.5s for a two-page
- * document, which fits a Vercel function with an order of magnitude to spare, and costs
- * about eight cents — four cents more than the same work batched. For one document that
- * trade is obviously right; for a re-index it is obviously wrong, which is what batch.ts
- * is for.
+ * Re-reads complex pages while the caller waits — the transport for an upload someone is
+ * watching. Roughly 23.5s and eight cents for a two-page document, about twice the price
+ * of the same work batched. For a re-index, use batch.ts instead.
  *
  * Never throws. Every failure — no key, no database, network, quota, malformed response,
  * failed validation — leaves the affected pages with the layout paragraphs they already
@@ -72,9 +68,9 @@ export async function enrichComplexPages(
 /**
  * Reads the missing pages, in as few requests as their output will fit into.
  *
- * Groups run one after another rather than at once: each re-sends the whole PDF, so
- * running them in parallel would multiply peak token throughput against the rate limit
- * for no latency gain worth having on a document this size.
+ * Groups run one after another: each re-sends the whole PDF, so running them in parallel
+ * would multiply peak token throughput against the rate limit for no latency gain worth
+ * having on a document this size.
  */
 async function readGroups(
   bytes: Uint8Array,
@@ -85,15 +81,10 @@ async function readGroups(
 
   for (const group of pagesToGroups(missing.map((page) => page.page)))
     try {
-      // Streamed, and not optional. The SDK refuses a non-streaming request whose
-      // max_tokens implies it could run past ten minutes — the cutoff works out at
-      // 21,333 tokens, and MAX_OUTPUT_TOKENS is 96,000 to hold the 50-page worst case.
-      // It throws before sending, so the failure costs nothing but looks exactly like a
-      // network error, and every page quietly keeps its layout paragraphs.
-      //
-      // finalMessage() reassembles the stream into the same Message the rest of this
-      // path already expects, so nothing downstream has to know. The batch transport is
-      // unaffected: a batch is submitted and collected later, never held open.
+      // Streamed, and not optional: the SDK refuses a non-streaming request whose
+      // max_tokens exceeds 21,333, and MAX_OUTPUT_TOKENS is 96,000. It throws before
+      // sending, which would look exactly like a network error and quietly fall back.
+      // finalMessage() reassembles the stream into the Message this path expects.
       const message = await client()
         .messages.stream(pagesToRequestParams(bytes, group))
         .finalMessage();
@@ -106,9 +97,8 @@ async function readGroups(
       if (!blocks || !hasExactlyPages(blocks, group)) continue;
 
       // Layer 3 is per page, so one unfaithful page does not cost its neighbours. A page
-      // that fails is simply not stored — it keeps its layout paragraphs, and the next
-      // ingest of this document reads it again, which is the right outcome for what is
-      // more often a sampling accident than a property of the page.
+      // that fails is not stored: it keeps its layout paragraphs and is read again on the
+      // next ingest.
       for (const number of group) {
         const page = byPage.get(number)!;
         const pageBlocks = blocks.get(number)!;

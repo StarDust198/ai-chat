@@ -3,24 +3,15 @@ import { enrichComplexPages } from "@/lib/extraction/sync";
 import { pdfToDocument, type PdfDocument } from "@/lib/pdf/document";
 
 /**
- * The boundary between "how text was obtained" and "how text is stored".
- *
- * Everything upstream of here is a pipeline — a PDF read geometrically and patched by a
- * model, a Markdown file, whatever comes next. Everything downstream takes a
- * DocumentSource and knows nothing else, so adding a pipeline means adding a producer in
- * this file and changing nothing in the chunker, the store, or the ingest.
- *
- * Segments are structural units, not chunks. A pipeline says what the units are and where
- * each came from; the chunker decides how they are grouped for retrieval. Keeping those
- * separate is what lets the chunker's rules be stated once instead of once per format.
+ * The boundary between "how text was obtained" and "how text is stored". Everything
+ * downstream takes a DocumentSource and knows nothing else, so adding a pipeline means
+ * adding a producer here and changing nothing in the chunker, the store, or the ingest.
  */
 
 /**
- * Which path produced a segment's text.
- *
- * "layout" — reconstructed from text positions on the page. "model" — an LLM re-read a
- * page whose geometry defeated that reconstruction. "text" — the source had no layout to
- * reconstruct, so nothing was inferred.
+ * Which path produced a segment's text. "layout" — reconstructed from text positions.
+ * "model" — an LLM re-read a page whose geometry defeated that. "text" — the source had
+ * no layout to reconstruct, so nothing was inferred.
  */
 export type SegmentSource = "layout" | "model" | "text";
 
@@ -62,15 +53,9 @@ const documentToSegments = (doc: PdfDocument): SourceSegment[] =>
 /**
  * A PDF, read geometrically and then improved where the geometry failed.
  *
- * enrichComplexPages never throws: no API key, no database, network, quota, a malformed
- * response, a failed faithfulness check — every one of them returns the document with its
- * layout paragraphs intact, page by page rather than document by document. So the
- * fallback needs no handling here, and is invisible in the result. What makes it visible
- * afterwards is `source` on the segments this produces, which is why it is carried.
- *
- * pdfToDocument is the only call here that can throw, and only on a file that is not
- * readable as a PDF at all — a document-level failure, which is what the caller's status
- * is for.
+ * enrichComplexPages never throws — a failure just returns the page's layout paragraphs —
+ * so the fallback needs no handling here and shows up only as `source` on the segments.
+ * pdfToDocument can throw, but only on a file that is not readable as a PDF at all.
  */
 export async function pdfSource(
   filename: string,
@@ -88,15 +73,9 @@ export async function pdfSource(
 }
 
 /**
- * Plain text, split on blank lines.
- *
- * Only empty segments are dropped. The previous ingest also dropped anything under 50
- * characters, which silently deleted every heading and every short paragraph in the
- * corpus — a length threshold cannot tell a stray line from a section title, and the
- * chunker's merge rules are the right place to deal with fragments.
- *
- * Nothing is inferred: no headings, no pages, and source "text" rather than "layout",
- * because no layout was reconstructed.
+ * Plain text, split on blank lines. Only empty segments are dropped — a length threshold
+ * cannot tell a stray line from a section title. Nothing is inferred: no headings, no
+ * pages, and source "text" rather than "layout".
  */
 export function textSource(filename: string, text: string): DocumentSource {
   const segments: SourceSegment[] = text

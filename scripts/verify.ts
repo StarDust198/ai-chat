@@ -7,12 +7,10 @@ import { PrismaClient } from "@prisma/client";
 /**
  * What landed in the database, and whether it holds the properties ingest promises.
  *
- * Split into invariants and observations on purpose. An invariant is something the code
- * guarantees whatever corpus it is pointed at — no chunk without its embedding, no PDF
- * chunk without a page — and a break in one is a bug. An observation is a property of this
- * corpus, printed rather than asserted, because the numbers move whenever a page is
- * re-read by a model or a threshold is tuned, and a test that fails on that would be
- * noise.
+ * Invariants are asserted: the code guarantees them whatever corpus it is pointed at — no
+ * chunk without its embedding, no PDF chunk without a page — so a break is a bug.
+ * Observations are printed rather than asserted, because they move whenever a page is
+ * re-read by a model or a threshold is tuned.
  */
 
 const USER_ID = "user_3EfGCicqs0zZFVz1bvnXeb64ycb";
@@ -20,12 +18,7 @@ const USER_ID = "user_3EfGCicqs0zZFVz1bvnXeb64ycb";
 /** A question whose answer lives on a two-column page, so it can only come from the model. */
 const LIVE_QUERY = "What is an idempotency key?";
 
-/**
- * What LIVE_QUERY scored when the glossary stored as three chunks of eight definitions.
- *
- * The correct chunk, retrieved at 0.771 against a 0.8 cutoff — one vector averaging eight
- * unrelated concepts. Kept as the number to beat once each entry is its own chunk.
- */
+/** Reference distance for LIVE_QUERY, printed for comparison. Lower is better. */
 const BASELINE_DISTANCE = 0.771;
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -69,8 +62,8 @@ async function shape() {
     `  status            ${statuses.map(({ status, n }) => `${status}=${n}`).join("  ")}`,
   );
 
-  // Per document, because the number that matters is not the total but whether a
-  // definition list came apart into entries or landed as three slabs.
+  // Per document: the number that matters is whether a definition list came apart into
+  // entries or landed as a few slabs.
   const perDocument = await rows<{ filename: string; n: number; headed: number }>`
     SELECT d.filename,
            count(*)::int AS n,
@@ -102,8 +95,8 @@ async function invariants() {
   const [{ unembedded }] = await rows<{ unembedded: number }>`
     SELECT count(*)::int AS unembedded FROM "Chunk" WHERE embedding IS NULL
   `;
-  // The whole point of writing embeddings in the same statement as their rows: there is
-  // no longer a window in which a chunk exists without one.
+  // storeChunks writes embeddings in the same statement as their rows, so there is no
+  // window in which a chunk can exist without one.
   check(unembedded === 0, `every chunk has an embedding (${unembedded} without)`);
 
   const models = await rows<{ model: string }>`
@@ -127,8 +120,7 @@ async function invariants() {
   `;
   check(untyped === 0, `every chunk carries its provenance (${untyped} without)`);
 
-  // index is what @@unique([documentId, index]) orders by, and a gap would mean the
-  // chunker dropped something between building and writing.
+  // A gap would mean the chunker dropped something between building and writing.
   const gaps = await rows<{ filename: string; n: number; lo: number; hi: number }>`
     SELECT d.filename, count(*)::int AS n, min(c.index)::int AS lo, max(c.index)::int AS hi
     FROM "Chunk" c JOIN "Document" d ON d.id = c."documentId"
@@ -165,9 +157,9 @@ async function provenance() {
   console.log(`  with heading      ${withHeading}/${total}`);
   console.log(`  with page label   ${withLabel}/${total}`);
 
-  // A heading should be a noun phrase. If the model starts promoting sentences that merely
-  // open with emphasis, threadHeadings carries the mistake forward over everything after it —
-  // and length is the cheapest way to see that happening.
+  // A heading should be a noun phrase. If the model starts promoting whole sentences,
+  // threadHeadings carries the mistake forward over everything after it, and length is the
+  // cheapest way to see that happening.
   const longest = await rows<{ heading: string; len: number }>`
     SELECT DISTINCT heading, length(heading)::int AS len
     FROM "Chunk" WHERE heading IS NOT NULL
@@ -182,9 +174,8 @@ async function provenance() {
 
   const model = sources.find((s) => s.source === "model")?.n ?? 0;
 
-  // Not an invariant: extraction falls back page by page and an ingest with no API key is
-  // a legitimate outcome. But it is the number the whole extraction stack exists to move,
-  // so a zero here is worth saying out loud rather than burying in a distribution.
+  // Not an invariant — an ingest with no API key legitimately produces none — but it is
+  // the number the extraction stack exists to move, so a zero is worth saying out loud.
   if (model === 0)
     console.log(
       "\n  NOTE  no chunk came from the model — every complex page fell back to layout." +
@@ -201,9 +192,7 @@ async function provenance() {
   console.log(
     `  ${cached[0].pages} cached page reads reachable from ${cached[0].documents} documents`,
   );
-  console.log(
-    "  (joined on fileHash — this is what Document.fileHash was added for)",
-  );
+  console.log("  (joined on fileHash)");
 }
 
 async function sizes() {
@@ -228,8 +217,8 @@ async function sizes() {
     `  min ${stat.min}  median ${stat.median}  p90 ${stat.p90}  max ${stat.max}  avg ${stat.avg}`,
   );
 
-  // 8,191 is the embedding model's input limit. storeChunks truncates before sending, so
-  // exceeding it is not a failure — but it means a passage was embedded incompletely.
+  // The embedding model's input limit is 8,191 tokens. storeChunks truncates before
+  // sending, so exceeding it means a passage was embedded incompletely, not that it failed.
   check(stat.max < 8000, `no chunk approaches the embedding input limit (max ${stat.max})`);
 
   const tables = await rows<{ filename: string; page: number; tokens: number; preview: string }>`
@@ -257,8 +246,8 @@ async function retrieval() {
   console.log("\n=== retrieval ===\n");
   console.log(`  "${LIVE_QUERY}"\n`);
 
-  // Same numbers the search_documents tool passes, so this reports on what production
-  // would see. Keep them in step with src/lib/tools/documents.ts.
+  // Same numbers the search_documents tool passes, so this reports what production sees.
+  // Keep them in step with src/lib/tools/documents.ts.
   const matches = await semanticSearch(LIVE_QUERY, USER_ID, {
     limit: 20,
     maxDistance: 0.6,
@@ -290,9 +279,7 @@ async function retrieval() {
     "the best match can be cited to a document and a page",
   );
 
-  // Reported rather than asserted: a hard threshold on an embedding distance is brittle, and
-  // this number's job is to be compared against what it used to be. BASELINE_DISTANCE is what
-  // this query scored when the whole glossary was three chunks of eight definitions each.
+  // Reported rather than asserted: a hard threshold on an embedding distance is brittle.
   const delta = top.distance - BASELINE_DISTANCE;
   console.log(
     `\n  top distance ${top.distance.toFixed(3)} vs ${BASELINE_DISTANCE} baseline` +

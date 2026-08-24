@@ -24,16 +24,14 @@ export type SearchMatch = {
 /**
  * Trims matches to a token budget, in rank order.
  *
- * A fixed match count is the wrong unit here: chunk sizes are non-uniform by design,
- * because a whole table is one chunk, so seven matches is anywhere from a few hundred
- * tokens to several thousand.
+ * A fixed match count is the wrong unit: chunk sizes are non-uniform by design, since a
+ * whole table is one chunk, so seven matches is anywhere from a few hundred tokens to
+ * several thousand.
  *
- * Stops at the first match that does not fit rather than skipping it to look for smaller
- * ones further down. Packing more in would mean handing the model a weak short passage
- * over a strong long one, which is the opposite of what ranking is for.
- *
- * The best match is always kept whatever its size: a large table as the top hit would
- * otherwise exceed the budget on its own and return nothing at all.
+ * Stops at the first match that does not fit rather than skipping ahead to smaller ones —
+ * packing more in would hand the model a weak short passage over a strong long one. The
+ * best match is always kept whatever its size, or a large table as the top hit would
+ * return nothing at all.
  */
 function withinBudget(matches: SearchMatch[], maxTokens: number): SearchMatch[] {
   const kept: SearchMatch[] = [];
@@ -77,9 +75,8 @@ export async function semanticSearch(
     JOIN "Document" d ON d.id = c."documentId"
     WHERE d."userId" = ${userId}
       AND c.embedding IS NOT NULL
-      -- Rows embedded by a different model are in a different vector space, so their
-      -- distances are not comparable to these and ranking them together is meaningless.
-      -- Chunk.model exists for exactly this; see the column's comment in schema.prisma.
+      -- Rows embedded by a different model live in a different vector space, so their
+      -- distances are not comparable and ranking them together is meaningless.
       AND c.model = ${EMBEDDING_MODEL}
       AND c.embedding <=> ${vec}::vector < ${maxDistance}
     ORDER BY c.embedding <=> ${vec}::vector

@@ -13,23 +13,13 @@ export async function embedChunks(texts: string[]): Promise<number[][]> {
     values: texts,
     providerOptions,
     maxParallelCalls: 2,
-    /**
-     * More attempts than the default 2, because the free tier answers a burst with 429.
-     *
-     * Raising this rather than sleeping between requests: the SDK already backs off
-     * exponentially and reads the response's own retry-after header, so it waits exactly
-     * as long as the server asked. A fixed delay is a guess that is either too slow on
-     * every run or still too fast on the one that matters.
-     *
-     * One request covers a whole document — embedMany batches up to the model's
-     * maxEmbeddingsPerCall, which no document here comes close to — so this is guarding
-     * a handful of calls per corpus, not one per chunk.
-     */
+    // More than the default 2: the free tier answers a burst with 429. The SDK backs off
+    // exponentially and honours the response's retry-after header, so it waits exactly as
+    // long as the server asked.
     maxRetries: 5,
   });
 
-  // Counts only. Logging `embeddings` here meant 1,536 floats per chunk on every ingest,
-  // which buried the per-document summary lines the ingest script prints.
+  // Counts only — the embeddings themselves are 1,536 floats per chunk.
   console.log(
     "embedChunks",
     `embedded ${texts.length} chunks, ${usage.tokens} tokens,` +

@@ -12,59 +12,36 @@ import {
 
 export interface PdfParagraph {
   text: string;
-  /**
-   * What this paragraph is. "table" can only ever come from a model: position and
-   * font size cannot tell a table row from a paragraph, which is why a page holding
-   * one is routed away from this reconstruction in the first place.
-   */
+  /** "table" can only come from a model — geometry cannot tell a table row from prose. */
   kind: "heading" | "paragraph" | "table";
-  /**
-   * The section heading this paragraph sits under, carried forward across page
-   * boundaries — page 2 of a section that began on page 1 keeps that heading. Null
-   * before the document's first heading. Filled in by threadHeadings.
-   */
+  /** The section heading this sits under, threaded across pages. Null before the first. */
   heading: string | null;
   /** Where it sits on the page. Null when the text did not come from the layout. */
   bbox: BBox | null;
-  /**
-   * "layout" — reconstructed from text positions on the page. "model" — extracted by
-   * an LLM because the layout defeated reconstruction, as tables and multi-column
-   * pages do. Answers who decided, where kind answers what was decided.
-   */
+  /** Which path produced the text. Answers who decided, where kind answers what. */
   source: "layout" | "model";
 }
 
 export interface PdfPage {
   /** 1-based physical page index, as a citation would render it. */
   page: number;
-  /**
-   * The page number the document prints on itself, when that disagrees with the
-   * physical index — front matter numbered i, ii, iii, or an offprint starting at
-   * 47. Null when it agrees, or when the PDF declares no labels at all.
-   */
+  /** What the page prints on itself, when it disagrees with `page`. Else null. */
   label: string | null;
   /**
-   * The page's /Rotate value, 0 for almost everything. Text coordinates are stored
-   * unrotated, so at 90 or 270 a page authored in the rotated frame has its visual
-   * lines running down the y axis and this layer reads them out of order. The margin
-   * bands are still correct; the reading order is not.
+   * The page's /Rotate value. Coordinates are stored unrotated, so at 90 or 270 the visual
+   * lines run down the y axis and this layer reads them out of order.
    */
   rotation: number;
   /**
-   * Whether the paragraphs below can be trusted. A "complex" page still carries
-   * layout-derived paragraphs — they are the fallback — but its columns, table cells,
-   * or scanned content need extracting by other means before they are worth citing.
+   * Whether the paragraphs below can be trusted. A "complex" page still carries them as a
+   * fallback, but needs re-reading by other means before it is worth citing.
    */
   layout: LayoutAssessment;
   paragraphs: PdfParagraph[];
 }
 
 export interface PdfDocument {
-  /**
-   * The document's own title, for citation display — "Expense and Reimbursement
-   * Policy" reads better than "03-expense-policy.pdf". Null when the layout offers no
-   * candidate, in which case the caller should fall back to the filename.
-   */
+  /** The document's own title, for citation display. Null — fall back to the filename. */
   title: string | null;
   pages: PdfPage[];
 }
@@ -75,11 +52,9 @@ const TITLE_SIZE_RATIO = 1.15;
 const SIZE_TOLERANCE = 0.5;
 
 /**
- * The line set in the largest font on page one, falling back to the running header.
- *
- * Only the items at the title's own size are joined. On a multi-column page the title
- * shares a baseline with body text from the neighbouring column, and taking the whole
- * line would splice that text onto the end of the title.
+ * The line set in the largest font on page one, falling back to the running header. Only
+ * the items at the title's own size are joined: on a multi-column page the title shares a
+ * baseline with the neighbouring column, which would otherwise be spliced onto it.
  */
 function deriveTitle(
   firstPage: Line[],
@@ -113,9 +88,8 @@ function deriveTitle(
 }
 
 /**
- * A label is worth carrying only when it disagrees with the physical index. A
- * PageLabels dictionary that merely spells out 1, 2, 3 tells a citation nothing, and
- * keeping it would put a redundant string on every chunk of every document.
+ * A label is worth carrying only when it disagrees with the physical index: a PageLabels
+ * dictionary that merely spells out 1, 2, 3 tells a citation nothing.
  */
 const pageLabel = (raw: string | undefined, page: number): string | null => {
   const label = raw?.trim();
@@ -123,11 +97,9 @@ const pageLabel = (raw: string | undefined, page: number): string | null => {
 };
 
 /**
- * Turns a PDF into pages of citable text.
- *
- * The only supported entry point. Stage order and page numbering are defined here
- * and nowhere else, so a second caller cannot assemble them differently and end up
- * citing the wrong page.
+ * Turns a PDF into pages of citable text — the only supported entry point. Stage order and
+ * page numbering are defined here and nowhere else, so no second caller can assemble them
+ * differently and cite the wrong page.
  */
 export async function pdfToDocument(
   data: Uint8Array | ArrayBuffer,
@@ -148,14 +120,12 @@ export async function pdfToDocument(
   for (const [i, pageLines] of pages.entries()) {
     const paragraphs: PdfParagraph[] = [];
 
-    // Paragraphs are built per page and never merged across one: a paragraph that
-    // spans a page break cannot be attributed to a single page, and a citation needs
-    // exactly one.
+    // Never merged across a page break: a paragraph spanning one cannot be attributed to
+    // a single page, and a citation needs exactly one.
     for (const paragraph of linesToParagraphs(pageLines)) {
       paragraphs.push({
         text: paragraph.text,
-        // The only evidence available here is size: anything set larger than the
-        // body is a heading, and nothing distinguishes a table row from prose.
+        // Size is the only evidence available here.
         kind: paragraph.fontSize > bodySize ? "heading" : "paragraph",
         heading: null,
         bbox: paragraph.bbox,
@@ -180,23 +150,20 @@ export async function pdfToDocument(
 }
 
 /**
- * Gives every paragraph the heading it sits under, carrying it across page
- * boundaries — page 2 of a section that began on page 1 keeps that heading.
+ * Gives every paragraph the heading it sits under, across page boundaries — page 2 of a
+ * section that began on page 1 keeps that heading.
  *
- * Runs over the whole document rather than inside the page loop because it has to be
- * run again whenever paragraphs are replaced: a page re-extracted by other means
- * contributes its own headings, and every page after it inherits from there.
- *
- * Reads kind rather than font size, so it behaves the same on paragraphs that never
- * had a font size to measure.
+ * Exported because it must run again whenever paragraphs are replaced: a re-extracted page
+ * contributes its own headings, and every page after it inherits from there. Reads kind
+ * rather than font size, so re-extracted paragraphs need none.
  */
 export function threadHeadings(pages: PdfPage[], title: string | null) {
   let heading: string | null = null;
 
   for (const page of pages)
     for (const paragraph of page.paragraphs) {
-      // The title is set larger than any heading, but it names the document rather
-      // than a section and PdfDocument.title already carries it.
+      // The title is set larger than any heading, but it names the document rather than a
+      // section and PdfDocument.title already carries it.
       if (paragraph.kind === "heading" && paragraph.text !== title)
         heading = paragraph.text;
 
