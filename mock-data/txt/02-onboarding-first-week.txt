@@ -1,0 +1,15 @@
+New Hire Onboarding - First Week
+Document owner: People Operations
+Last updated: 2025-12-02
+
+Every new hire is assigned a buddy before their start date. The buddy is not the hiring manager and is usually someone in an adjacent team. The buddy's job is to answer the questions that feel too small to ask a manager. Buddies are expected to hold a 30 minute call on day one, day three, and at the end of week two.
+
+Day one is deliberately light. Accounts are provisioned in advance: email, Slack, GitHub, 1Password, and Linear. Multi-factor authentication must be enabled on all five before any production access is granted. The people operations team runs a 45 minute welcome session at 13:00 EET covering how the company communicates, where documents live, and what the on-call expectations are for engineering roles.
+
+By day five every engineering hire is expected to have opened at least one pull request. It does not need to be significant. Typo fixes in documentation are explicitly encouraged for a first contribution. The goal is to walk the full path from local setup through review to deploy while someone is still watching closely.
+
+New hires receive a hardware budget of 2500 euros, refreshed every two years. Laptops are ordered by the operations team rather than reimbursed. Peripherals, chairs, and desks come out of the same budget and are purchased directly by the employee against a receipt.
+
+Week one reading is short on purpose: this handbook, the code review guidelines, and the incident severity definitions. Nobody is expected to read the Relay API reference in week one. Support hires additionally read the escalation policy and shadow two live tickets before taking their own.
+
+The 30-60-90 review happens with the hiring manager at the end of the first, second, and third month. There is no formal performance rating attached to it. It exists to catch a bad fit early, in either direction.

@@ -1,0 +1,29 @@
+Internal Glossary
+Document owner: People Operations
+Last updated: 2026-01-22
+
+Atlas. The internal name for the S1 delivery outage in eu-fra on 14 November 2025, caused by an expired mTLS certificate. Named after the deploy immediately preceding it, which turned out to be unrelated. Used as the reference example for postmortem format.
+
+Backlog. Undelivered events queued behind a failing or throttled endpoint. Distinct from the dead letter queue: a backlog will still be delivered, dead lettered events will not be unless replayed.
+
+DLQ. Dead letter queue. Where an event goes after its final retry attempt fails. Retained 14 days on every plan.
+
+Endpoint. A customer-owned HTTPS URL that Relay delivers to. Each endpoint has its own signing secret, its own circuit breaker, and its own dead letter queue.
+
+Fair-share scheduler. The per-tenant queue partitioning shipped in February 2026 so that one tenant's retry volume cannot delay another tenant's deliveries.
+
+Flush window. The period after a circuit breaker closes during which held events are delivered. Not a rate limit, though it is often mistaken for one.
+
+Region. One of eu-tll, eu-fra, us-iad, ap-sin. A tenant's primary region is chosen at signup and determines where events are stored and delivered from.
+
+Relay. The core event delivery product, generally available since November 2020.
+
+S1 to S4. Severity levels. S1 and S2 page immediately; S3 and S4 do not. Defined in full in the on-call document.
+
+Signal. The delivery observability add-on released June 2024. Included on Scale and Enterprise, sold separately on Growth, unavailable on Starter.
+
+Source. Where events enter Relay, as opposed to an endpoint, which is where they leave.
+
+Tenant. One customer account within a region. Used in engineering contexts where customer would be ambiguous, since a single customer may hold several tenants.
+
+Vault. The secrets storage product, sunset announced September 2025, end of life 30 June 2026. Existing customers were notified individually and pointed at the migration guide.

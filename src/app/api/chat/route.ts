@@ -9,21 +9,31 @@ import {
 } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { tools } from "@/lib/tools";
+import { buildTools } from "@/lib/tools";
+import { buildSystemPrompt } from "@/lib/prompts/chat";
 import { getChat, saveChat, validateMessages } from "@/lib/actions/chats";
 import { MyUIMessage } from "@/types/chat";
 import { auth } from "@clerk/nextjs/server";
 
 const schema = z.object({
-  // Message is validated below
+  // Unchecked here: validateMessages runs it through the AI SDK's own validator below.
   message: z.custom<MyUIMessage>(),
-  // messages: z.array(z.custom<MyUIMessage>()),
   modelId: z.string(),
   chatId: z.string(),
+  /**
+   * Which retrieval tools this message may use. Absent means both, so a client that knows
+   * nothing about sources — which is every client until the toggles are built — gets the
+   * full set.
+   */
+  sources: z
+    .object({ documents: z.boolean(), web: z.boolean() })
+    .partial()
+    .default({})
+    .transform(({ documents = true, web = true }) => ({ documents, web })),
 });
 
 export async function POST(req: Request) {
-  const { isAuthenticated } = await auth();
+  const { isAuthenticated, userId } = await auth();
 
   if (!isAuthenticated) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,7 +48,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { message, modelId, chatId } = parsed.data;
+  const { message, modelId, chatId, sources } = parsed.data;
 
   const chat = await getChat({ chatId });
 
@@ -88,11 +98,21 @@ export async function POST(req: Request) {
     };
   }
 
+  // Narrows the tool map rather than rebuilding it — see buildTools in lib/tools.
+  const activeTools = [
+    "calc",
+    "weather",
+    ...(sources.documents ? (["search_documents"] as const) : []),
+    ...(sources.web ? (["web_search"] as const) : []),
+  ] as const;
+
   const result = streamText({
     model: anthropic(modelId),
+    system: buildSystemPrompt(sources),
     messages: modelMessages,
     stopWhen: stepCountIs(5),
-    tools,
+    tools: buildTools(userId),
+    activeTools,
   });
 
   // consume the stream to ensure it runs to completion & triggers onEnd

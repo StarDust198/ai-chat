@@ -1,0 +1,15 @@
+Relay API Quickstart
+Document owner: Engineering
+Last updated: 2025-12-15
+
+Relay accepts events over HTTPS and delivers them to endpoints you register. There are two things to configure: a source, which is where events enter, and one or more endpoints, which is where they go. Everything else is defaults.
+
+Authentication uses an API key sent in the X-Nordvane-Key header. Keys are scoped to a single environment and a single region. There are no global keys. A key can be rotated without downtime by creating a second key, migrating traffic, then revoking the first. Keys are shown once at creation and are not retrievable afterwards.
+
+Publishing an event is a POST to /v1/events with a JSON body containing a type, a payload, and optionally an idempotency_key. If an idempotency_key is supplied and has been seen within the last 24 hours, the request returns 200 and the event is not duplicated. The maximum accepted payload size is 256 kilobytes. Requests above that return 413.
+
+Outbound deliveries carry two headers your receiver should verify. X-Nordvane-Signature contains an HMAC-SHA256 signature of the raw request body computed with your endpoint's signing secret. X-Nordvane-Timestamp contains the Unix timestamp at signing time. Reject any request where the timestamp is more than five minutes from your own clock, otherwise a captured request can be replayed against you.
+
+Your endpoint should return any 2xx status to acknowledge a delivery. Anything else is treated as a failure and enters the retry path described in the retry semantics document. Relay waits 10 seconds for a response before treating the attempt as failed, and a timeout counts as a failure like any other.
+
+Rate limits on the publish API are 500 requests per second on Starter and Growth and 5,000 requests per second on Scale. Exceeding the limit returns 429 with a Retry-After header. These limits apply to inbound publishing only and are separate from delivery throughput.

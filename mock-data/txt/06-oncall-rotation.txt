@@ -1,0 +1,15 @@
+On-Call Rotation and Severity Definitions
+Document owner: Engineering
+Last updated: 2026-01-20
+
+The on-call rotation runs in seven day shifts with handover every Wednesday at 10:00 EET. Each shift has a primary and a secondary. The primary takes all pages. The secondary is paged only if the primary does not acknowledge within ten minutes, and is otherwise expected to be available for a second opinion. Only engineers who have completed the onboarding shadow shift are added to the rotation.
+
+Severity levels are defined as follows. S1 means event delivery is failing or delayed for multiple tenants in at least one region, or customer data is at risk. S2 means a single tenant is materially affected, or a region is degraded but delivering. S3 means a bug with a workaround and no delivery impact. S4 is cosmetic or internal only.
+
+S1 and S2 page immediately, at any hour. S3 and S4 do not page and are triaged during working hours. Only S1 and S2 create an incident channel. The person who declares the severity is whoever notices first, not whoever is most senior. Severity is revised upward or downward freely during an incident and the final value is set in the postmortem.
+
+Primary on-call compensation is 400 euros per week. Secondary is 150 euros per week. Compensation is paid regardless of whether any pages occurred. Swaps are arranged directly between engineers and recorded in the rotation tool; the compensation follows the shift, not the original assignee.
+
+Any S1 requires a written postmortem within five working days, published to the whole company. Postmortems are blameless in the specific sense that they name systems and decisions but not individuals. The Atlas incident postmortem from November 2025 is the reference example for the expected format and depth.
+
+An engineer who is paged more than three times outside working hours in a single shift may hand the remainder of the shift to the secondary without asking. This is not a favour and does not need justification.

@@ -1,0 +1,15 @@
+Relay Pricing and Plan Limits
+Document owner: Sales
+Last updated: 2026-01-05
+
+Relay is sold on four plans. Starter is 49 euros per month and includes 100,000 delivered events. Growth is 249 euros per month and includes 2 million events. Scale is 1,200 euros per month and includes 20 million events. Enterprise is negotiated individually and starts at 40 million events per year.
+
+Overage is billed monthly in arrears. Starter and Growth are charged 0.40 euros per additional 10,000 events. Scale is charged 0.25 euros per additional 10,000 events. Enterprise overage rates are set in the individual agreement. A delivered event is counted once regardless of how many retry attempts it required, which is a deliberate difference from several competitors.
+
+Plan limits beyond volume. Starter allows 5 endpoints and 7 days of event history. Growth allows 50 endpoints and 30 days of history. Scale allows unlimited endpoints and 90 days of history. Cross-region failover is available on Scale and Enterprise only. Signal, the observability add-on, is included on Scale and Enterprise and costs 99 euros per month on Growth. Signal is not available on Starter.
+
+Billing is annual or monthly. Annual billing carries a 15 percent discount and is invoiced in advance. Monthly billing is charged to card on the first of the month. Plan downgrades take effect at the end of the current billing period; upgrades take effect immediately and are prorated.
+
+Kirren Retail is on an Enterprise agreement signed in 2022 and renewed in 2025. Their agreement includes a service credit clause: 10 percent of monthly fees for each full hour of S1 delivery interruption, capped at 50 percent of the monthly fee. Similar clauses exist in six other Enterprise agreements. Standard plans carry no contractual credit and are handled case by case by support.
+
+Vault is no longer sold. Existing Vault customers were moved to a flat 0 euro rate in October 2025 and will lose access on 30 June 2026.

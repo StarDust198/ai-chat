@@ -1,0 +1,15 @@
+Code Review and Deployment Guidelines
+Document owner: Engineering
+Last updated: 2026-01-15
+
+Every change to a production service goes through a pull request. Direct pushes to main are blocked at the repository level for everyone including the CTO. There is no emergency bypass; an emergency fix goes through the same path with a single reviewer and a shorter description.
+
+Most repositories require one approval. The relay-core repository requires two, at least one from an engineer who has been on the on-call rotation for that service. Changes to migration files require review from the platform team regardless of repository. Changes to public API contracts require an explicit note in the PR description describing the compatibility impact.
+
+The review service level is one business day. A pull request that has been open for two business days without review can be escalated in the engineering channel. Reviewers are expected to be specific: a comment saying this feels wrong without a proposed alternative is not a review. Approving a PR you do not understand is a worse failure than admitting you do not understand it.
+
+Deploys are continuous. Merging to main deploys to staging automatically and to production after the staging smoke suite passes. There is no release train and no manual deploy window, with one exception: no deploys to relay-core after 14:00 EET on Fridays or on the day before a public holiday in Estonia. This rule exists because both regional incidents in the last 18 months were discovered by people who were about to stop working for the day.
+
+Feature flags are the default for anything user visible. Flags older than 60 days appear on a weekly report and are expected to be either removed or promoted to configuration. A flag is not a substitute for a migration plan.
+
+Rollbacks are always acceptable and never require discussion. Roll back first, understand second. An engineer who rolls back someone else's change without asking is doing the right thing, and the expectation is that they say so in the channel immediately afterwards.
