@@ -1,3 +1,4 @@
+import { EMBEDDING_MODEL } from "@/constants/models";
 import { prisma } from "../prisma";
 import { estimateTokens } from "./chunker";
 import { embedQuery } from "./embeddings";
@@ -74,7 +75,12 @@ export async function semanticSearch(
       c.embedding <=> ${vec}::vector AS distance
     FROM "Chunk" c
     JOIN "Document" d ON d.id = c."documentId"
-    WHERE c.embedding IS NOT NULL
+    WHERE d."userId" = ${userId}
+      AND c.embedding IS NOT NULL
+      -- Rows embedded by a different model are in a different vector space, so their
+      -- distances are not comparable to these and ranking them together is meaningless.
+      -- Chunk.model exists for exactly this; see the column's comment in schema.prisma.
+      AND c.model = ${EMBEDDING_MODEL}
       AND c.embedding <=> ${vec}::vector < ${maxDistance}
     ORDER BY c.embedding <=> ${vec}::vector
     LIMIT ${limit}
@@ -82,6 +88,3 @@ export async function semanticSearch(
 
   return withinBudget(matches, maxTokens);
 }
-
-// -- WHERE d."userId" = ${userId}
-// --   AND c.embedding IS NOT NULL

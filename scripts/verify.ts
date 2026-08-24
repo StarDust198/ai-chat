@@ -15,7 +15,7 @@ import { PrismaClient } from "@prisma/client";
  * noise.
  */
 
-const USER_ID = "dev-user";
+const USER_ID = "user_3EfGCicqs0zZFVz1bvnXeb64ycb";
 
 /** A question whose answer lives on a two-column page, so it can only come from the model. */
 const LIVE_QUERY = "What is an idempotency key?";
@@ -257,10 +257,11 @@ async function retrieval() {
   console.log("\n=== retrieval ===\n");
   console.log(`  "${LIVE_QUERY}"\n`);
 
-  // Same numbers the chat route uses, so this reports on what production would see.
+  // Same numbers the search_documents tool passes, so this reports on what production
+  // would see. Keep them in step with src/lib/tools/documents.ts.
   const matches = await semanticSearch(LIVE_QUERY, USER_ID, {
     limit: 20,
-    maxDistance: 0.8,
+    maxDistance: 0.6,
     maxTokens: 4000,
   });
 

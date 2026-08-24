@@ -126,9 +126,14 @@ export async function getChats(): Promise<Chat[]> {
 }
 
 export async function deleteChat({ id }: { id: string }): Promise<Chat> {
+  const userId = await getUserId();
+
+  // userId alongside the id, as saveChat does: an id on its own is guessable, and this is
+  // a server action, so "the client only ever sends its own" is not a control.
   return await prisma.chat.delete({
     where: {
       id,
+      userId,
     },
   });
 }

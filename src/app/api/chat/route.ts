@@ -9,11 +9,11 @@ import {
 } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { z } from "zod";
-import { tools } from "@/lib/tools";
+import { buildTools } from "@/lib/tools";
+import { buildSystemPrompt } from "@/lib/prompts/chat";
 import { getChat, saveChat, validateMessages } from "@/lib/actions/chats";
 import { MyUIMessage } from "@/types/chat";
 import { auth } from "@clerk/nextjs/server";
-import { SearchMatch, semanticSearch } from "@/lib/rag/search";
 
 const schema = z.object({
   // Message is validated below
@@ -21,55 +21,17 @@ const schema = z.object({
   // messages: z.array(z.custom<MyUIMessage>()),
   modelId: z.string(),
   chatId: z.string(),
+  /**
+   * Which retrieval tools this message may use. Absent means both, so a client that
+   * knows nothing about sources — which is every client until the toggles are built —
+   * gets the full set.
+   */
+  sources: z
+    .object({ documents: z.boolean(), web: z.boolean() })
+    .partial()
+    .default({})
+    .transform(({ documents = true, web = true }) => ({ documents, web })),
 });
-
-const escapeAttribute = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
-
-/**
- * Where a passage came from, as attributes the model can quote back.
- *
- * pageLabel wins over page when it exists, because it is what the page prints on itself —
- * citing "page 4" for a page numbered iv sends the reader to the wrong place. Empty
- * fields are omitted rather than rendered as null, which reads to a model as a fact.
- */
-const matchToAttributes = (match: SearchMatch) => {
-  const printed = match.pageLabel ?? match.page;
-
-  return [
-    `file="${escapeAttribute(match.filename)}"`,
-    match.title && `title="${escapeAttribute(match.title)}"`,
-    printed !== null && `page="${escapeAttribute(String(printed))}"`,
-    match.heading && `heading="${escapeAttribute(match.heading)}"`,
-  ]
-    .filter(Boolean)
-    .join(" ");
-};
-
-const createPrompt = (question: string, searchResults: SearchMatch[]) => {
-  return `
-    You are about to be given a set of documents, matching user's request.
-    Your task is to answer user's question using only the information in the documents.
-    If there are no documents - say that there's no information available.
-
-    Cite the source of every fact you use: the document's title (or its filename when it
-    has no title) and the page it appears on, taken from that document's attributes.
-
-    Here is the user's question:
-    <question>
-      ${question}
-    </question>
-
-    Here are the document parts in the matching order:
-    <documents>
-      ${searchResults
-        .map((match) => {
-          return `<document ${matchToAttributes(match)}>${match.content}</document>`;
-        })
-        .join("\n\n")}
-    </documents>
-`;
-};
 
 export async function POST(req: Request) {
   const { isAuthenticated, userId } = await auth();
@@ -87,25 +49,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { message, modelId, chatId } = parsed.data;
-
-  // ! Addition
-  if (message.parts[0].type === "text") {
-    const messageText = message.parts[0].text;
-    const searchResults = await semanticSearch(messageText, userId, {
-      // A count alone is not a budget: one of these could be a whole table, and a
-      // glossary entry is a fortieth of one. maxTokens is the real control; limit is
-      // only the cap on how far down the ranking it is worth looking.
-      limit: 20,
-      maxDistance: 0.8,
-      maxTokens: 4000,
-    });
-
-    console.log("Chat handler", { searchResults });
-
-    message.parts[0].text = createPrompt(messageText, searchResults);
-  }
-  // ! Addition
+  const { message, modelId, chatId, sources } = parsed.data;
 
   const chat = await getChat({ chatId });
 
@@ -155,11 +99,23 @@ export async function POST(req: Request) {
     };
   }
 
+  // The whole map is always declared and `activeTools` does the narrowing. Which sources
+  // are on is a property of this request; the conversation it replays is permanent, so a
+  // history holding a web_search call has to stay valid on a turn where web is off.
+  const activeTools = [
+    "calc",
+    "weather",
+    ...(sources.documents ? (["search_documents"] as const) : []),
+    ...(sources.web ? (["web_search"] as const) : []),
+  ] as const;
+
   const result = streamText({
     model: anthropic(modelId),
+    system: buildSystemPrompt(sources),
     messages: modelMessages,
     stopWhen: stepCountIs(5),
-    tools,
+    tools: buildTools(userId),
+    activeTools,
   });
 
   // consume the stream to ensure it runs to completion & triggers onEnd
